@@ -1,0 +1,100 @@
+import { z } from "zod";
+
+export const createLeadSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Name must contain at least 2 characters")
+    .max(150, "Name cannot exceed 150 characters"),
+
+  phoneCountryCode: z
+    .string()
+    .trim()
+    .regex(/^\+[1-9]\d{0,3}$/, "Invalid phone country code"),
+
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{6,15}$/, "Phone number must contain 6 to 15 digits"),
+
+  email: z
+    .string()
+    .trim()
+    .email("Invalid email address")
+    .max(150)
+    .optional()
+    .or(z.literal("")),
+
+  city: z.string().trim().max(100).optional(),
+
+  industry: z.string().trim().max(100).optional(),
+
+  message: z.string().trim().max(5000).optional(),
+
+  remarks: z.string().trim().max(5000).optional(),
+
+  source: z.string().trim().min(1, "Lead source is required").max(100),
+
+  sourceType: z.enum(["MANUAL", "EXCEL", "API", "IMPORT"]),
+
+  branchId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, "Invalid branch ID")
+    .optional(),
+});
+
+export type CreateLeadInput = z.infer<typeof createLeadSchema>;
+
+export const listLeadQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+
+  search: z.string().trim().max(100).optional(),
+
+  status: z
+    .enum([
+      "NEW",
+      "ASSIGNED",
+      "CONTACTED",
+      "FOLLOW_UP",
+      "INTERESTED",
+      "NEGOTIATION",
+      "WON",
+      "LOST",
+      "JUNK",
+    ])
+    .optional(),
+
+  source: z.string().trim().max(100).optional(),
+
+  branchId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, "Invalid branch ID")
+    .optional(),
+
+  assignedTo: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, "Invalid employee ID")
+    .optional(),
+
+  fromDate: z.string().datetime().optional(),
+
+  toDate: z.string().datetime().optional(),
+
+  sortBy: z
+    .enum(["createdAt", "updatedAt", "name", "status"])
+    .default("createdAt"),
+
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export type ListLeadQuery = z.infer<typeof listLeadQuerySchema>;
+
+export const assignLeadSchema = z.object({
+  employeeId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid employee ID"),
+
+  reason: z.string().trim().max(500).optional(),
+});
+
+export type AssignLeadInput = z.infer<typeof assignLeadSchema>;

@@ -25,9 +25,13 @@ export const AUDIT_ACTIONS = {
   // Security
   PASSWORD_CHANGED: "PASSWORD_CHANGED",
   PASSWORD_RESET: "PASSWORD_RESET",
+
+  // Leads
+  LEAD_CREATED: "LEAD_CREATED",
+  LEAD_UPDATED: "LEAD_UPDATED",
+  LEAD_DELETED: "LEAD_DELETED",
+  LEAD_ASSIGNED: "LEAD_ASSIGNED",
+  LEAD_REASSIGNED: "LEAD_REASSIGNED",
 } as const;
 
-export type AuditAction =
-  typeof AUDIT_ACTIONS[
-    keyof typeof AUDIT_ACTIONS
-  ];
+export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
