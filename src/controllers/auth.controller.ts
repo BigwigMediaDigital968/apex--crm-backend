@@ -167,11 +167,35 @@ export const logoutController = async (
   }
 };
 
-export const getMeController = async (req: Request, res: Response) => {
-  return res.status(200).json({
-    success: true,
-    data: {
-      user: req.user,
-    },
-  });
+export const getMeController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user?.id) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    const user = await User.findById(req.user.id)
+      .select("-password")
+      .lean();
+
+    if (!user) {
+      throw new AppError("User account not found", 404, "USER_NOT_FOUND");
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          ...user,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
