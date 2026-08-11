@@ -68,11 +68,11 @@ sessionSchema.index({
   revokedAt: 1,
 });
 
-sessionSchema.index(
-  { expiresAt: 1 },
-  {
-    expireAfterSeconds: 0,
-  },
-);
+// sessionSchema.index(
+//   { expiresAt: 1 },
+//   {
+//     expireAfterSeconds: 0,
+//   },
+// );
 
 export const Session = mongoose.model<ISession>("Session", sessionSchema);

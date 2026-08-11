@@ -87,7 +87,7 @@ export const loginUser =
       refreshToken,
 
       user: {
-        id:
+        _id:
           user._id.toString(),
         name: user.name,
         email: user.email,

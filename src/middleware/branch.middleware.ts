@@ -1,63 +1,79 @@
 import type {
   NextFunction,
   Request,
-  Response
+  Response,
 } from "express";
 
-import {
-  hasBranchAccess
-} from "../utils/branchAccess.js";
-
-import { AppError } from "../utils/AppError.js";
+import { ROLES } from "../constants/roles.js";
 
 export const requireBranchAccess = (
   branchIdResolver: (
-    req: Request
-  ) => string | undefined
+    req: Request,
+  ) => string | undefined,
 ) => {
   return (
     req: Request,
-    _res: Response,
-    next: NextFunction
+    res: Response,
+    next: NextFunction,
   ) => {
-    if (!req.user) {
-      return next(
-        new AppError(
-          "Authentication required",
-          401,
-          "AUTHENTICATION_REQUIRED"
-        )
-      );
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Authentication required",
+          code:
+            "AUTHENTICATION_REQUIRED",
+        });
+      }
+
+      const branchId =
+        branchIdResolver(req);
+
+      if (!branchId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Branch ID is required",
+          code:
+            "BRANCH_ID_REQUIRED",
+        });
+      }
+
+      /*
+       * HEAD has global branch access.
+       */
+      if (
+        req.user.role ===
+        ROLES.HEAD
+      ) {
+        return next();
+      }
+
+      /*
+       * Other roles must have
+       * the branch assigned to them.
+       */
+      const hasAccess =
+        req.user.branches.some(
+          (branch) =>
+            branch.toString() ===
+            branchId.toString(),
+        );
+
+      if (!hasAccess) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You do not have access to this branch",
+          code:
+            "BRANCH_ACCESS_DENIED",
+        });
+      }
+
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    const branchId =
-      branchIdResolver(req);
-
-    if (!branchId) {
-      return next(
-        new AppError(
-          "Branch ID is required",
-          400,
-          "BRANCH_ID_REQUIRED"
-        )
-      );
-    }
-
-    if (
-      !hasBranchAccess(
-        req.user,
-        branchId
-      )
-    ) {
-      return next(
-        new AppError(
-          "You do not have access to this branch",
-          403,
-          "BRANCH_ACCESS_DENIED"
-        )
-      );
-    }
-
-    next();
   };
 };

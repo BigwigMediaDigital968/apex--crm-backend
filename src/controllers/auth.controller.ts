@@ -41,7 +41,7 @@ export const loginController = async (
 
       entity: AUDIT_ENTITIES.AUTH,
 
-      entityId: result.user.id,
+      entityId: result.user._id,
 
       metadata: {
         role: result.user.role,

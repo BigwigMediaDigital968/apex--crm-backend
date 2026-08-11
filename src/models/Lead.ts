@@ -207,4 +207,9 @@ leadSchema.index({
   createdAt: -1,
 });
 
+leadSchema.index({
+  phoneCountryCode: 1,
+  phone: 1,
+});
+
 export const Lead = mongoose.model<ILead>("Lead", leadSchema);

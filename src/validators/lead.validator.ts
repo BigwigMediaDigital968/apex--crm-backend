@@ -103,9 +103,33 @@ export type AssignLeadInput = z.infer<typeof assignLeadSchema>;
 export const updateLeadStatusSchema = z.object({
   status: z.enum(Object.values(LEAD_STATUS) as [string, ...string[]]),
 
-  remark: z.string().trim().max(2000).optional(),
+  remark: z
+    .string()
+    .trim()
+    .max(2000, "Remark cannot exceed 2000 characters")
+    .optional(),
 });
 
+export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
+
 export const addLeadRemarkSchema = z.object({
-  remark: z.string().trim().min(1, "Remark is required").max(2000),
+  remark: z
+    .string()
+    .trim()
+    .min(1, "Remark is required")
+    .max(2000, "Remark cannot exceed 2000 characters"),
 });
+
+export type AddLeadRemarkInput = z.infer<typeof addLeadRemarkSchema>;
+
+export const createLeadFollowUpSchema = z.object({
+  followUpAt: z.coerce.date(),
+
+  remark: z
+    .string()
+    .trim()
+    .max(2000, "Remark cannot exceed 2000 characters")
+    .optional(),
+});
+
+export type CreateLeadFollowUpInput = z.infer<typeof createLeadFollowUpSchema>;
