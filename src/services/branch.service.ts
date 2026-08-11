@@ -64,9 +64,7 @@ export const createBranch = async (data: CreateBranchInput, userId: string) => {
 
 export const getBranches = async (user: AuthenticatedUser) => {
   if (user.role === ROLES.HEAD) {
-    return Branch.find({
-      isActive: true,
-    }).sort({
+    return Branch.find().sort({
       name: 1,
     });
   }
@@ -75,7 +73,6 @@ export const getBranches = async (user: AuthenticatedUser) => {
     _id: {
       $in: user.branches,
     },
-    isActive: true,
   }).sort({
     name: 1,
   });
