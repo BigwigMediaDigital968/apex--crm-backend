@@ -22,6 +22,93 @@ export const canCreateRole = (creatorRole: Role, targetRole: Role): boolean => {
   return allowedRoles.includes(targetRole);
 };
 
+// export const createUser = async (
+//   data: CreateUserInput,
+//   creatorId: string,
+//   creatorRole: Role,
+// ) => {
+//   const { name, email, password, role, branches = [] } = data;
+
+//   if (!name?.trim()) {
+//     throw new AppError("Name is required", 400, "NAME_REQUIRED");
+//   }
+
+//   if (!email?.trim()) {
+//     throw new AppError("Email is required", 400, "EMAIL_REQUIRED");
+//   }
+
+//   if (!password) {
+//     throw new AppError("Password is required", 400, "PASSWORD_REQUIRED");
+//   }
+
+//   if (!Object.values(ROLES).includes(role as any)) {
+//     throw new AppError("Invalid role", 400, "INVALID_ROLE");
+//   }
+
+//   if (!canCreateRole(creatorRole, role)) {
+//     throw new AppError(
+//       `You cannot create a user with role ${role}`,
+//       403,
+//       "ROLE_CREATION_FORBIDDEN",
+//     );
+//   }
+
+//   const normalizedEmail = email.trim().toLowerCase();
+
+//   const existingUser = await User.findOne({
+//     email: normalizedEmail,
+//   });
+
+//   if (existingUser) {
+//     throw new AppError(
+//       "A user with this email already exists",
+//       409,
+//       "USER_EMAIL_EXISTS",
+//     );
+//   }
+
+//   const validBranchIds: Types.ObjectId[] = [];
+
+//   for (const branchId of branches) {
+//     if (!Types.ObjectId.isValid(branchId)) {
+//       throw new AppError(
+//         `Invalid branch ID: ${branchId}`,
+//         400,
+//         "INVALID_BRANCH_ID",
+//       );
+//     }
+
+//     const branch = await Branch.findOne({
+//       _id: branchId,
+//       isActive: true,
+//     });
+
+//     if (!branch) {
+//       throw new AppError(
+//         `Branch not found or inactive: ${branchId}`,
+//         404,
+//         "BRANCH_NOT_FOUND",
+//       );
+//     }
+
+//     validBranchIds.push(new Types.ObjectId(branchId));
+//   }
+
+//   const hashedPassword = await bcrypt.hash(password, 12);
+
+//   const user = await User.create({
+//     name: name.trim(),
+//     email: normalizedEmail,
+//     password: hashedPassword, // 👈 Pass hashedPassword here!
+//     role,
+//     branches: validBranchIds,
+//     createdBy: new Types.ObjectId(creatorId),
+//     isActive: true,
+//   });
+
+//   return user;
+// };
+
 export const createUser = async (
   data: CreateUserInput,
   creatorId: string,
@@ -53,6 +140,30 @@ export const createUser = async (
     );
   }
 
+  // Deduplicate input branch IDs
+  const uniqueBranchIds = Array.from(new Set(branches));
+
+  // --- ROLE-BASED BRANCH LIMIT VALIDATION ---
+  const singleBranchRoles = [ROLES.EMPLOYEE, ROLES.MANAGER];
+
+  if (singleBranchRoles.includes(role as any)) {
+    if (uniqueBranchIds.length === 0) {
+      throw new AppError(
+        `${role} must be assigned to exactly one branch`,
+        400,
+        "BRANCH_REQUIRED",
+      );
+    }
+
+    if (uniqueBranchIds.length > 1) {
+      throw new AppError(
+        `${role} can only be assigned to a single branch`,
+        400,
+        "SINGLE_BRANCH_LIMIT_EXCEEDED",
+      );
+    }
+  }
+
   const normalizedEmail = email.trim().toLowerCase();
 
   const existingUser = await User.findOne({
@@ -67,9 +178,8 @@ export const createUser = async (
     );
   }
 
-  const validBranchIds: Types.ObjectId[] = [];
-
-  for (const branchId of branches) {
+  // Validate format for all branch IDs
+  for (const branchId of uniqueBranchIds) {
     if (!Types.ObjectId.isValid(branchId)) {
       throw new AppError(
         `Invalid branch ID: ${branchId}`,
@@ -77,21 +187,26 @@ export const createUser = async (
         "INVALID_BRANCH_ID",
       );
     }
+  }
 
-    const branch = await Branch.findOne({
-      _id: branchId,
+  // --- BATCH DATABASE LOOKUP ($in) ---
+  const validBranchIds: Types.ObjectId[] = [];
+
+  if (uniqueBranchIds.length > 0) {
+    const foundBranches = await Branch.find({
+      _id: { $in: uniqueBranchIds },
       isActive: true,
-    });
+    }).select("_id");
 
-    if (!branch) {
+    if (foundBranches.length !== uniqueBranchIds.length) {
       throw new AppError(
-        `Branch not found or inactive: ${branchId}`,
+        "One or more branches were not found or are inactive",
         404,
         "BRANCH_NOT_FOUND",
       );
     }
 
-    validBranchIds.push(new Types.ObjectId(branchId));
+    validBranchIds.push(...foundBranches.map((b) => b._id as Types.ObjectId));
   }
 
   const hashedPassword = await bcrypt.hash(password, 12);
@@ -99,7 +214,7 @@ export const createUser = async (
   const user = await User.create({
     name: name.trim(),
     email: normalizedEmail,
-    password: hashedPassword, // 👈 Pass hashedPassword here!
+    password: hashedPassword,
     role,
     branches: validBranchIds,
     createdBy: new Types.ObjectId(creatorId),
@@ -108,128 +223,6 @@ export const createUser = async (
 
   return user;
 };
-
-// export const updateUserBranches = async (
-//   userId: string,
-//   branchIds: string[],
-//   actorId: string,
-//   actorRole: Role,
-// ) => {
-//   if (!Types.ObjectId.isValid(userId)) {
-//     throw new AppError(
-//       "Invalid user ID",
-//       400,
-//       "INVALID_USER_ID",
-//     );
-//   }
-
-//   const targetUser =
-//     await User.findById(userId);
-
-//   if (!targetUser) {
-//     throw new AppError(
-//       "User not found",
-//       404,
-//       "USER_NOT_FOUND",
-//     );
-//   }
-
-//   if (
-//     targetUser.role === ROLES.HEAD
-//   ) {
-//     throw new AppError(
-//       "Head user branch access cannot be modified",
-//       403,
-//       "HEAD_BRANCH_UPDATE_FORBIDDEN",
-//     );
-//   }
-
-//   if (
-//     !canManageRole(
-//       actorRole,
-//       targetUser.role,
-//     )
-//   ) {
-//     throw new AppError(
-//       "You do not have permission to manage this user",
-//       403,
-//       "USER_MANAGEMENT_FORBIDDEN",
-//     );
-//   }
-
-//   const validBranchIds: Types.ObjectId[] = [];
-
-//   for (const branchId of branchIds) {
-//     if (!Types.ObjectId.isValid(branchId)) {
-//       throw new AppError(
-//         `Invalid branch ID: ${branchId}`,
-//         400,
-//         "INVALID_BRANCH_ID",
-//       );
-//     }
-
-//     const branch =
-//       await Branch.findOne({
-//         _id: branchId,
-//         isActive: true,
-//       });
-
-//     if (!branch) {
-//       throw new AppError(
-//         `Branch not found or inactive: ${branchId}`,
-//         404,
-//         "BRANCH_NOT_FOUND",
-//       );
-//     }
-
-//     validBranchIds.push(
-//       new Types.ObjectId(branchId),
-//     );
-//   }
-
-//   if (actorRole !== ROLES.HEAD) {
-//     const actor =
-//       await User.findById(actorId).select(
-//         "branches role",
-//       );
-
-//     if (!actor) {
-//       throw new AppError(
-//         "Actor not found",
-//         404,
-//         "ACTOR_NOT_FOUND",
-//       );
-//     }
-
-//     const actorBranchIds =
-//       actor.branches.map((id) =>
-//         id.toString(),
-//       );
-
-//     const hasUnauthorizedBranch =
-//       validBranchIds.some(
-//         (branchId) =>
-//           !actorBranchIds.includes(
-//             branchId.toString(),
-//           ),
-//       );
-
-//     if (hasUnauthorizedBranch) {
-//       throw new AppError(
-//         "You cannot assign a branch you do not have access to",
-//         403,
-//         "BRANCH_ASSIGNMENT_FORBIDDEN",
-//       );
-//     }
-//   }
-
-//   targetUser.branches =
-//     validBranchIds;
-
-//   await targetUser.save();
-
-//   return targetUser;
-// };
 
 export const updateUserBranches = async (
   userId: string,
