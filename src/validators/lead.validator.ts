@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEAD_STATUS } from "../constants/leadStatus.js";
 
 export const createLeadSchema = z.object({
   name: z
@@ -98,3 +99,13 @@ export const assignLeadSchema = z.object({
 });
 
 export type AssignLeadInput = z.infer<typeof assignLeadSchema>;
+
+export const updateLeadStatusSchema = z.object({
+  status: z.enum(Object.values(LEAD_STATUS) as [string, ...string[]]),
+
+  remark: z.string().trim().max(2000).optional(),
+});
+
+export const addLeadRemarkSchema = z.object({
+  remark: z.string().trim().min(1, "Remark is required").max(2000),
+});

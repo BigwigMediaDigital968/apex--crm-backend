@@ -1,19 +1,6 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-export const LEAD_STATUS = {
-  NEW: "NEW",
-  ASSIGNED: "ASSIGNED",
-  CONTACTED: "CONTACTED",
-  FOLLOW_UP: "FOLLOW_UP",
-  INTERESTED: "INTERESTED",
-  NEGOTIATION: "NEGOTIATION",
-  WON: "WON",
-  LOST: "LOST",
-  JUNK: "JUNK",
-} as const;
-
-export type LeadStatus =
-  (typeof LEAD_STATUS)[keyof typeof LEAD_STATUS];
+import { LEAD_STATUS, type LeadStatus } from "../constants/leadStatus.js";
 
 export const LEAD_SOURCE_TYPE = {
   MANUAL: "MANUAL",
@@ -120,13 +107,15 @@ const leadSchema = new Schema<ILead>(
       type: String,
       enum: Object.values(LEAD_STATUS),
       default: LEAD_STATUS.NEW,
+      required: true,
       index: true,
     },
 
     remarks: {
       type: String,
       trim: true,
-      maxlength: 5000,
+      maxlength: 2000,
+      default: null,
     },
 
     source: {
@@ -218,7 +207,4 @@ leadSchema.index({
   createdAt: -1,
 });
 
-export const Lead = mongoose.model<ILead>(
-  "Lead",
-  leadSchema,
-);
+export const Lead = mongoose.model<ILead>("Lead", leadSchema);

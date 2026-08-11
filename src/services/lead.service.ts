@@ -4,7 +4,7 @@ import { Lead } from "../models/Lead.js";
 import { User } from "../models/User.js";
 import { Branch } from "../models/Branch.js";
 
-import { LEAD_STATUS, LEAD_SOURCE_TYPE } from "../models/Lead.js";
+import { LEAD_STATUS, type LeadStatus } from "../constants/leadStatus.js";
 
 import { ROLES } from "../constants/roles.js";
 
@@ -16,6 +16,8 @@ import type { CreateLeadInput } from "../validators/lead.validator.js";
 
 import type { ListLeadQuery } from "../validators/lead.validator.js";
 import { LeadAssignment } from "../models/LeadAssignment.js";
+
+import { LeadActivity, LEAD_ACTIVITY_TYPE } from "../models/LeadActivity.js";
 
 interface AssignLeadInput {
   employeeId: string;
@@ -637,7 +639,7 @@ export const assignLead = async (
 
   lead.assignedTo = employee._id;
 
-  lead.status = "ASSIGNED";
+  lead.status = LEAD_STATUS.ASSIGNED;
 
   await lead.save();
 
@@ -664,4 +666,197 @@ export const assignLead = async (
   });
 
   return lead;
+};
+
+export const updateLeadStatus = async (
+  leadId: string,
+  status: LeadStatus,
+  remark: string | undefined,
+  user: AuthenticatedUser,
+) => {
+  if (!Types.ObjectId.isValid(leadId)) {
+    throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
+  }
+
+  const lead = await Lead.findById(leadId);
+
+  if (!lead || lead.isDeleted) {
+    throw new AppError("Lead not found", 404, "LEAD_NOT_FOUND");
+  }
+
+  /**
+   * Employee access
+   */
+  if (user.role === ROLES.EMPLOYEE) {
+    if (!lead.assignedTo || lead.assignedTo.toString() !== user.id) {
+      throw new AppError(
+        "You can only update leads assigned to you",
+        403,
+        "LEAD_ACCESS_DENIED",
+      );
+    }
+  }
+
+  /**
+   * Branch-level access
+   */
+  if (user.role !== ROLES.HEAD) {
+    const hasBranchAccess = user.branches.includes(lead.branch.toString());
+
+    if (!hasBranchAccess) {
+      throw new AppError(
+        "You do not have access to this lead",
+        403,
+        "BRANCH_ACCESS_DENIED",
+      );
+    }
+  }
+
+  const previousStatus = lead.status;
+
+  if (previousStatus === status && !remark) {
+    throw new AppError("No changes were provided", 400, "NO_CHANGES");
+  }
+
+  /**
+   * Update current Lead state
+   */
+  lead.status = status;
+
+  if (remark) {
+    lead.remarks = remark;
+  }
+
+  await lead.save();
+
+  /**
+   * Record status history
+   */
+  await LeadActivity.create({
+    lead: lead._id,
+
+    activityType: LEAD_ACTIVITY_TYPE.STATUS_CHANGED,
+
+    performedBy: new Types.ObjectId(user.id),
+
+    previousStatus,
+
+    newStatus: status,
+
+    remark: remark || undefined,
+  });
+
+  return lead;
+};
+
+export const addLeadRemark = async (
+  leadId: string,
+  remark: string,
+  user: AuthenticatedUser,
+) => {
+  if (!Types.ObjectId.isValid(leadId)) {
+    throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
+  }
+
+  const lead = await Lead.findById(leadId);
+
+  if (!lead || lead.isDeleted) {
+    throw new AppError("Lead not found", 404, "LEAD_NOT_FOUND");
+  }
+
+  /**
+   * Employee can only modify
+   * assigned leads.
+   */
+  if (user.role === ROLES.EMPLOYEE) {
+    if (!lead.assignedTo || lead.assignedTo.toString() !== user.id) {
+      throw new AppError(
+        "You can only add remarks to leads assigned to you",
+        403,
+        "LEAD_ACCESS_DENIED",
+      );
+    }
+  }
+
+  /**
+   * Branch access
+   */
+  if (user.role !== ROLES.HEAD) {
+    if (!user.branches.includes(lead.branch.toString())) {
+      throw new AppError(
+        "You do not have access to this lead",
+        403,
+        "BRANCH_ACCESS_DENIED",
+      );
+    }
+  }
+
+  lead.remarks = remark;
+
+  await lead.save();
+
+  await LeadActivity.create({
+    lead: lead._id,
+
+    activityType: LEAD_ACTIVITY_TYPE.REMARK_ADDED,
+
+    performedBy: new Types.ObjectId(user.id),
+
+    remark,
+  });
+
+  return lead;
+};
+
+export const getLeadActivities = async (
+  leadId: string,
+  user: AuthenticatedUser,
+) => {
+  if (!Types.ObjectId.isValid(leadId)) {
+    throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
+  }
+
+  const lead = await Lead.findById(leadId).select(
+    "_id branch assignedTo isDeleted",
+  );
+
+  if (!lead || lead.isDeleted) {
+    throw new AppError("Lead not found", 404, "LEAD_NOT_FOUND");
+  }
+
+  /**
+   * Employee isolation
+   */
+  if (user.role === ROLES.EMPLOYEE) {
+    if (!lead.assignedTo || lead.assignedTo.toString() !== user.id) {
+      throw new AppError(
+        "You do not have access to this lead",
+        403,
+        "LEAD_ACCESS_DENIED",
+      );
+    }
+  }
+
+  /**
+   * Branch isolation
+   */
+  if (
+    user.role !== ROLES.HEAD &&
+    !user.branches.includes(lead.branch.toString())
+  ) {
+    throw new AppError(
+      "You do not have access to this lead",
+      403,
+      "BRANCH_ACCESS_DENIED",
+    );
+  }
+
+  return LeadActivity.find({
+    lead: lead._id,
+  })
+    .populate("performedBy", "_id name email role")
+    .sort({
+      createdAt: -1,
+    })
+    .lean();
 };

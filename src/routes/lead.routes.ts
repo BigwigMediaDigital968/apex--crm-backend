@@ -5,6 +5,9 @@ import {
   listLeadsController,
   getLeadController,
   assignLeadController,
+  updateLeadStatusController,
+  addLeadRemarkController,
+  getLeadActivitiesController,
 } from "../controllers/lead.controller.js";
 
 import { authenticate } from "../middleware/auth.middleware.js";
@@ -41,6 +44,33 @@ router.post(
   authenticate,
   authorize(PERMISSIONS.LEAD_ASSIGN),
   assignLeadController,
+);
+
+router.patch(
+  "/:id/status",
+  authenticate,
+  authorize(
+    PERMISSIONS.LEAD_UPDATE,
+  ),
+  updateLeadStatusController,
+);
+
+router.post(
+  "/:id/remarks",
+  authenticate,
+  authorize(
+    PERMISSIONS.LEAD_UPDATE,
+  ),
+  addLeadRemarkController,
+);
+
+router.get(
+  "/:id/activities",
+  authenticate,
+  authorize(
+    PERMISSIONS.LEAD_VIEW,
+  ),
+  getLeadActivitiesController,
 );
 
 export default router;
