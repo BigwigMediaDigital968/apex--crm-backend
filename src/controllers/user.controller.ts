@@ -8,6 +8,7 @@ import {
   getUsers,
   updateUser,
   updateUserStatus,
+  getUserById,
 } from "../services/user.service.js";
 
 import type { UserListQuery } from "../types/user.js";
@@ -139,6 +140,41 @@ export const getUsersController = async (req: Request, res: Response) => {
     message: "Users fetched successfully",
     data: result.users,
     pagination: result.pagination,
+  });
+};
+
+export const getUserByIdController = async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication required",
+      code: "AUTHENTICATION_REQUIRED",
+    });
+  }
+
+  const userId = req.params.id as string;
+
+  const user = await getUserById(userId, req.user.id, req.user.role);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+      code: "USER_NOT_FOUND",
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "User fetched successfully",
+    data: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      branches: user.branches,
+      isActive: user.isActive,
+    },
   });
 };
 

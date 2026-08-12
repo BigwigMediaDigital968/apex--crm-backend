@@ -201,7 +201,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Tasks
     PERMISSIONS.TASK_VIEW,
-    PERMISSIONS.TASK_CREATE,
     PERMISSIONS.TASK_UPDATE,
 
     // Activities

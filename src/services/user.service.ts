@@ -375,6 +375,16 @@ export const getUsers = async (
   };
 };
 
+export const getUserById = async (
+  userId: string,
+  requestorId: string,
+  requestorRole: string,
+) => {
+  // Add any role-based access or branch-scoping checks if needed
+  const user = await User.findById(userId).lean();
+  return user;
+};
+
 export const updateUser = async (
   userId: string,
   data: UpdateUserInput,

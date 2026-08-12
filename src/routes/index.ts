@@ -6,6 +6,7 @@ import permissionRoutes from "./permission.route.js";
 import sessionRoutes from "./session.routes.js";
 import auditRoutes from "./audit.routes.js";
 import leadRoutes from "./lead.routes.js";
+import taskRoutes from "./task.routes.js";
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use("/permissions", permissionRoutes);
 router.use("/sessions", sessionRoutes);
 router.use("/audit-logs", auditRoutes);
 router.use("/leads", leadRoutes);
+router.use("/tasks", taskRoutes);
 
 export default router;
