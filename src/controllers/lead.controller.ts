@@ -206,178 +206,136 @@ export const getLeadController = async (
 //   }
 // };
 
-export const updateLeadStatusController =
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required",
-          code:
-            "AUTHENTICATION_REQUIRED",
-        });
-      }
-
-      const leadId =
-        typeof req.params.id ===
-        "string"
-          ? req.params.id
-          : undefined;
-
-      if (!leadId) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Lead ID is required",
-          code:
-            "LEAD_ID_REQUIRED",
-        });
-      }
-
-      const data =
-        updateLeadStatusSchema.parse(
-          req.body,
-        );
-
-      const lead =
-        await updateLeadStatus({
-          leadId,
-
-          status:
-            data.status,
-
-          remark:
-            data.remark,
-
-          userId:
-            req.user.id,
-        });
-
-      return res.status(200).json({
-        success: true,
-        message:
-          "Lead status updated successfully",
-        data: {
-          lead,
-        },
+export const updateLeadStatusController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        code: "AUTHENTICATION_REQUIRED",
       });
-    } catch (error) {
-      next(error);
     }
-  };
 
-export const addLeadRemarkController =
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required",
-          code:
-            "AUTHENTICATION_REQUIRED",
-        });
-      }
+    const leadId =
+      typeof req.params.id === "string" ? req.params.id : undefined;
 
-      const leadId =
-        typeof req.params.id ===
-        "string"
-          ? req.params.id
-          : undefined;
-
-      if (!leadId) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Lead ID is required",
-          code:
-            "LEAD_ID_REQUIRED",
-        });
-      }
-
-      const data =
-        addLeadRemarkSchema.parse(
-          req.body,
-        );
-
-      const lead =
-        await addLeadRemark({
-          leadId,
-
-          remark:
-            data.remark,
-
-          userId:
-            req.user.id,
-        });
-
-      return res.status(200).json({
-        success: true,
-        message:
-          "Lead remark added successfully",
-        data: {
-          lead,
-        },
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead ID is required",
+        code: "LEAD_ID_REQUIRED",
       });
-    } catch (error) {
-      next(error);
     }
-  };
 
-export const getLeadActivitiesController =
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required",
-          code:
-            "AUTHENTICATION_REQUIRED",
-        });
-      }
+    const data = updateLeadStatusSchema.parse(req.body);
 
-      const leadId =
-        typeof req.params.id ===
-        "string"
-          ? req.params.id
-          : undefined;
+    const lead = await updateLeadStatus({
+      leadId,
 
-      if (!leadId) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Lead ID is required",
-          code:
-            "LEAD_ID_REQUIRED",
-        });
-      }
+      status: data.status,
 
-      const activities =
-        await getLeadActivities(
-          leadId,
-        );
+      remark: data.remark,
 
-      return res.status(200).json({
-        success: true,
-        data: {
-          activities,
-        },
+      userId: req.user.id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Lead status updated successfully",
+      data: {
+        lead,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addLeadRemarkController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        code: "AUTHENTICATION_REQUIRED",
       });
-    } catch (error) {
-      next(error);
     }
-  };
+
+    const leadId =
+      typeof req.params.id === "string" ? req.params.id : undefined;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead ID is required",
+        code: "LEAD_ID_REQUIRED",
+      });
+    }
+
+    const data = addLeadRemarkSchema.parse(req.body);
+
+    const lead = await addLeadRemark({
+      leadId,
+
+      remark: data.remark,
+
+      userId: req.user.id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Lead remark added successfully",
+      data: {
+        lead,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getLeadActivitiesController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        code: "AUTHENTICATION_REQUIRED",
+      });
+    }
+
+    const leadId =
+      typeof req.params.id === "string" ? req.params.id : undefined;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead ID is required",
+        code: "LEAD_ID_REQUIRED",
+      });
+    }
+
+    const activities = await getLeadActivities(leadId);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        activities,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

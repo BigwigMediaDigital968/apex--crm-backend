@@ -10,6 +10,13 @@ import {
   getLeadActivitiesController,
 } from "../controllers/lead.controller.js";
 
+import {
+  createLeadFollowUpController,
+  completeLeadFollowUpController,
+  getLeadFollowUpsController,
+  getMyPendingFollowUpsController,
+} from "../controllers/lead-followup.controller.js";
+
 import { assignLeadController } from "../controllers/lead-assignment.controller.js";
 
 import { importLeadsController } from "../controllers/lead-import.controller.js";
@@ -36,6 +43,27 @@ router.get(
   authenticate,
   authorize(PERMISSIONS.LEAD_VIEW),
   listLeadsController,
+);
+
+router.get(
+  "/my/follow-ups",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_VIEW),
+  getMyPendingFollowUpsController,
+);
+
+router.post(
+  "/:id/follow-ups",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_UPDATE),
+  createLeadFollowUpController,
+);
+
+router.get(
+  "/:id/follow-ups",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_VIEW),
+  getLeadFollowUpsController,
 );
 
 router.get(
@@ -84,6 +112,13 @@ router.post(
       : undefined,
   ),
   importLeadsController,
+);
+
+router.patch(
+  "/follow-ups/:followUpId/complete",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_UPDATE),
+  completeLeadFollowUpController,
 );
 
 export default router;
