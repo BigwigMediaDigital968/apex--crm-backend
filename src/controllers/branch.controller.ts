@@ -16,6 +16,11 @@ import { auditRequest } from "../utils/audit.js";
 import { AUDIT_ACTIONS } from "../constants/auditActions.js";
 
 import { AUDIT_ENTITIES } from "../constants/auditEntities.js";
+import {
+  getBranchAttendanceConfig,
+  updateBranchAttendanceConfig,
+} from "../services/branchAttendance.service.js";
+import { updateBranchAttendanceConfigSchema } from "../validators/branchAttendance.validator.js";
 
 export const createBranchController = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -147,5 +152,78 @@ export const updateBranchStatusController = async (
       ? "Branch activated successfully"
       : "Branch deactivated successfully",
     data: branch,
+  });
+};
+
+export const getBranchAttendanceConfigController = async (
+  req: Request,
+  res: Response,
+) => {
+  const branchId = req.params.id;
+
+  if (typeof branchId !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid branch ID",
+      code: "INVALID_BRANCH_ID",
+    });
+  }
+
+  const result = await getBranchAttendanceConfig(branchId);
+
+  return res.status(200).json({
+    success: true,
+    message: "Branch attendance configuration fetched successfully",
+    data: result,
+  });
+};
+
+export const updateBranchAttendanceConfigController = async (
+  req: Request,
+  res: Response,
+) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication required",
+      code: "AUTHENTICATION_REQUIRED",
+    });
+  }
+
+  const branchId = req.params.id;
+
+  if (typeof branchId !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid branch ID",
+      code: "INVALID_BRANCH_ID",
+    });
+  }
+
+  const data = updateBranchAttendanceConfigSchema.parse(req.body);
+
+  const branch = await updateBranchAttendanceConfig(
+    branchId,
+    data,
+    req.user.id,
+  );
+
+  await createAuditLog({
+    actor: req.user.id,
+    action: "BRANCH_UPDATED",
+    entity: "Branch",
+    entityId: branch._id.toString(),
+    branch: branch._id.toString(),
+    metadata: {
+      type: "ATTENDANCE_CONFIGURATION_UPDATED",
+    },
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Branch attendance configuration updated successfully",
+    data: branch.attendanceConfig,
   });
 };

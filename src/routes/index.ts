@@ -7,6 +7,8 @@ import sessionRoutes from "./session.routes.js";
 import auditRoutes from "./audit.routes.js";
 import leadRoutes from "./lead.routes.js";
 import taskRoutes from "./task.routes.js";
+import employeeRoutes from "./employee.routes.js";
+import holidayRoutes from "./holiday.routes.js";
 
 const router = Router();
 
@@ -26,5 +28,7 @@ router.use("/sessions", sessionRoutes);
 router.use("/audit-logs", auditRoutes);
 router.use("/leads", leadRoutes);
 router.use("/tasks", taskRoutes);
+router.use("/employee", employeeRoutes);
+router.use("/holidays", holidayRoutes);
 
 export default router;

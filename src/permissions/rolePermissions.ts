@@ -1,8 +1,5 @@
 import { ROLES, type Role } from "../constants/roles.js";
-import {
-  PERMISSIONS,
-  type Permission,
-} from "../constants/permissions.js";
+import { PERMISSIONS, type Permission } from "../constants/permissions.js";
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // =========================================================
@@ -25,8 +22,30 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.USER_ASSIGN_BRANCH,
     PERMISSIONS.USER_STATUS_UPDATE,
 
+    // Employee Details
+    PERMISSIONS.EMPLOYEE_VIEW,
+    PERMISSIONS.EMPLOYEE_CREATE,
+    PERMISSIONS.EMPLOYEE_UPDATE,
+    PERMISSIONS.EMPLOYEE_DOCUMENT_VIEW,
+    PERMISSIONS.EMPLOYEE_DOCUMENT_UPDATE,
+    PERMISSIONS.EMPLOYEE_SALARY_VIEW,
+    PERMISSIONS.EMPLOYEE_SALARY_UPDATE,
+
+    PERMISSIONS.ATTENDANCE_CONFIG_VIEW,
+    PERMISSIONS.ATTENDANCE_CONFIG_UPDATE,
+
     // Branches
     PERMISSIONS.BRANCH_VIEW,
+    PERMISSIONS.BRANCH_UPDATE,
+
+    PERMISSIONS.BRANCH_ATTENDANCE_VIEW,
+    PERMISSIONS.BRANCH_ATTENDANCE_UPDATE,
+
+    // Branch Holidays
+    PERMISSIONS.HOLIDAY_VIEW,
+    PERMISSIONS.HOLIDAY_CREATE,
+    PERMISSIONS.HOLIDAY_UPDATE,
+    PERMISSIONS.HOLIDAY_DELETE,
 
     // Lead Sources
     PERMISSIONS.LEAD_SOURCE_READ,
@@ -111,6 +130,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // Users
     PERMISSIONS.USER_VIEW,
 
+    // Eployee Details
+    PERMISSIONS.EMPLOYEE_VIEW,
+    PERMISSIONS.EMPLOYEE_DOCUMENT_VIEW,
+
     // Branch
     PERMISSIONS.BRANCH_VIEW,
 
@@ -176,6 +199,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   [ROLES.EMPLOYEE]: [
     // Own / assigned users visibility
     PERMISSIONS.USER_VIEW,
+
+    // Employee Details
+    PERMISSIONS.EMPLOYEE_VIEW,
 
     // Lead Sources
     PERMISSIONS.LEAD_SOURCE_READ,

@@ -1,6 +1,8 @@
 export const AUDIT_ENTITIES = {
   USER: "User",
+  EMPLOYEE_PROFILE: "EmployeeProfile",
   BRANCH: "Branch",
+  HOLIDAY: "Holiday",
   SESSION: "Session",
   AUTH: "Auth",
   LEAD: "Lead",
@@ -9,7 +11,4 @@ export const AUDIT_ENTITIES = {
   TASK: "Task",
 } as const;
 
-export type AuditEntity =
-  typeof AUDIT_ENTITIES[
-    keyof typeof AUDIT_ENTITIES
-  ];
+export type AuditEntity = (typeof AUDIT_ENTITIES)[keyof typeof AUDIT_ENTITIES];

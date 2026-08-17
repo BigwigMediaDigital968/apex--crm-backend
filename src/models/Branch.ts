@@ -1,5 +1,29 @@
 import { Schema, model, Types, type Document } from "mongoose";
 
+export interface IBranchLocation {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}
+
+export interface IBranchWorkingHours {
+  startTime: string;
+  endTime: string;
+}
+
+export interface IBranchAttendanceConfig {
+  enabled: boolean;
+  timezone: string;
+
+  location: IBranchLocation;
+
+  workingDays: number[];
+
+  workingHours: IBranchWorkingHours;
+
+  gracePeriodMinutes: number;
+}
+
 export interface IBranch extends Document {
   name: string;
   code: string;
@@ -10,14 +34,14 @@ export interface IBranch extends Document {
   country?: string;
   phone?: string;
   email?: string;
-
   isActive: boolean;
-
   createdBy: Types.ObjectId;
   updatedBy?: Types.ObjectId;
 
   createdAt: Date;
   updatedAt: Date;
+
+  attendanceConfig: IBranchAttendanceConfig;
 }
 
 const branchSchema = new Schema<IBranch>(
@@ -98,6 +122,72 @@ const branchSchema = new Schema<IBranch>(
     updatedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
+    },
+
+    attendanceConfig: {
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+
+      timezone: {
+        type: String,
+        required: true,
+        default: "Asia/Kolkata",
+        trim: true,
+      },
+
+      location: {
+        latitude: {
+          type: Number,
+          required: true,
+          min: -90,
+          max: 90,
+        },
+
+        longitude: {
+          type: Number,
+          required: true,
+          min: -180,
+          max: 180,
+        },
+
+        radiusMeters: {
+          type: Number,
+          required: true,
+          min: 10,
+          max: 5000,
+          default: 200,
+        },
+      },
+
+      workingDays: {
+        type: [Number],
+        required: true,
+        default: [1, 2, 3, 4, 5, 6],
+      },
+
+      workingHours: {
+        startTime: {
+          type: String,
+          required: true,
+          default: "09:30",
+        },
+
+        endTime: {
+          type: String,
+          required: true,
+          default: "18:30",
+        },
+      },
+
+      gracePeriodMinutes: {
+        type: Number,
+        required: true,
+        min: 0,
+        max: 180,
+        default: 15,
+      },
     },
   },
   {

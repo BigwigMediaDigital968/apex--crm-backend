@@ -12,6 +12,17 @@ export const PERMISSIONS = {
   USER_ASSIGN_BRANCH: "user:assign-branch",
   USER_STATUS_UPDATE: "user:status:update",
 
+  // Employee / HR
+
+  EMPLOYEE_VIEW: "employee:view",
+  EMPLOYEE_CREATE: "employee:create",
+  EMPLOYEE_UPDATE: "employee:update",
+  EMPLOYEE_DELETE: "employee:delete",
+  EMPLOYEE_DOCUMENT_VIEW: "employee:document:view",
+  EMPLOYEE_DOCUMENT_UPDATE: "employee:document:update",
+  EMPLOYEE_SALARY_VIEW: "employee:salary:view",
+  EMPLOYEE_SALARY_UPDATE: "employee:salary:update",
+
   // =========================================================
   // BRANCH MANAGEMENT
   // =========================================================
@@ -20,6 +31,21 @@ export const PERMISSIONS = {
   BRANCH_CREATE: "branch:create",
   BRANCH_UPDATE: "branch:update",
   BRANCH_DELETE: "branch:delete",
+
+  // Branch Attendance Configuration
+  BRANCH_ATTENDANCE_VIEW: "branch-attendance:view",
+  BRANCH_ATTENDANCE_UPDATE: "branch-attendance:update",
+
+  // Attendance Configuration
+
+  ATTENDANCE_CONFIG_VIEW: "attendance-config:view",
+  ATTENDANCE_CONFIG_UPDATE: "attendance-config:update",
+
+  // Holidays
+  HOLIDAY_VIEW: "holiday:view",
+  HOLIDAY_CREATE: "holiday:create",
+  HOLIDAY_UPDATE: "holiday:update",
+  HOLIDAY_DELETE: "holiday:delete",
 
   // =========================================================
   // LEAD SOURCES
@@ -156,5 +182,4 @@ export const PERMISSIONS = {
   AUDIT_READ: "audit:read",
 } as const;
 
-export type Permission =
-  (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
