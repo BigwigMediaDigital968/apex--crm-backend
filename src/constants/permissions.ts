@@ -41,6 +41,15 @@ export const PERMISSIONS = {
   ATTENDANCE_CONFIG_VIEW: "attendance-config:view",
   ATTENDANCE_CONFIG_UPDATE: "attendance-config:update",
 
+  // Attendance
+
+  ATTENDANCE_VIEW: "attendance:view",
+  ATTENDANCE_CHECK_IN: "attendance:check-in",
+  ATTENDANCE_CHECK_OUT: "attendance:check-out",
+  ATTENDANCE_MANAGE: "attendance:manage",
+  ATTENDANCE_REPORT: "attendance:report",
+  ATTENDANCE_EXPORT: "attendance:export",
+
   // Holidays
   HOLIDAY_VIEW: "holiday:view",
   HOLIDAY_CREATE: "holiday:create",
@@ -108,16 +117,6 @@ export const PERMISSIONS = {
   ACTIVITY_CREATE: "activity:create",
   ACTIVITY_UPDATE: "activity:update",
   ACTIVITY_DELETE: "activity:delete",
-
-  // =========================================================
-  // ATTENDANCE
-  // =========================================================
-
-  ATTENDANCE_VIEW: "attendance:view",
-  ATTENDANCE_CREATE: "attendance:create",
-  ATTENDANCE_UPDATE: "attendance:update",
-  ATTENDANCE_DELETE: "attendance:delete",
-  ATTENDANCE_MANAGE: "attendance:manage",
 
   // =========================================================
   // SALARY / PAYROLL

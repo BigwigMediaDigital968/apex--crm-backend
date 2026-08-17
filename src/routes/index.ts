@@ -9,6 +9,7 @@ import leadRoutes from "./lead.routes.js";
 import taskRoutes from "./task.routes.js";
 import employeeRoutes from "./employee.routes.js";
 import holidayRoutes from "./holiday.routes.js";
+import attendanceRoutes from "./attendance.routes.js";
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use("/leads", leadRoutes);
 router.use("/tasks", taskRoutes);
 router.use("/employee", employeeRoutes);
 router.use("/holidays", holidayRoutes);
+router.use("/attendance", attendanceRoutes);
 
 export default router;

@@ -1,28 +1,22 @@
-import mongoose, {
-  Document,
-  Schema,
-} from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
 
 import {
   ATTENDANCE_STATUS,
   type AttendanceStatus,
-} from "../constants/attendanceStatus.js";
-
-import {
-  ATTENDANCE_MODE,
-  type AttendanceMode,
-} from "../constants/attendanceMode.js";
+  ATTENDANCE_WORK_MODE,
+  type AttendanceWorkMode,
+} from "../constants/attendance.js";
 
 export interface IAttendance extends Document {
   employee: mongoose.Types.ObjectId;
 
   branch: mongoose.Types.ObjectId;
 
-  attendanceDate: Date;
+  date: string;
 
   status: AttendanceStatus;
 
-  mode: AttendanceMode;
+  workMode: AttendanceWorkMode;
 
   checkInAt?: Date;
 
@@ -32,147 +26,138 @@ export interface IAttendance extends Document {
 
   checkInLongitude?: number;
 
-  checkInDistanceMeters?: number;
-
   checkOutLatitude?: number;
 
   checkOutLongitude?: number;
 
+  checkInDistanceMeters?: number;
+
   checkOutDistanceMeters?: number;
+
+  lateMinutes: number;
+
+  earlyCheckoutMinutes: number;
 
   totalWorkingMinutes?: number;
 
-  lateMinutes?: number;
-
-  earlyCheckoutMinutes?: number;
-
   remarks?: string;
-
-  isRegularized: boolean;
-
-  regularizedBy?: mongoose.Types.ObjectId;
-
-  regularizedAt?: Date;
 
   createdAt: Date;
 
   updatedAt: Date;
 }
 
-const attendanceSchema =
-  new Schema<IAttendance>(
-    {
-      employee: {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-        index: true,
-      },
-
-      branch: {
-        type: Schema.Types.ObjectId,
-        ref: "Branch",
-        required: true,
-        index: true,
-      },
-
-      attendanceDate: {
-        type: Date,
-        required: true,
-        index: true,
-      },
-
-      status: {
-        type: String,
-        enum: Object.values(ATTENDANCE_STATUS),
-        required: true,
-        index: true,
-      },
-
-      mode: {
-        type: String,
-        enum: Object.values(ATTENDANCE_MODE),
-        required: true,
-        default: ATTENDANCE_MODE.WFO,
-      },
-
-      checkInAt: {
-        type: Date,
-      },
-
-      checkOutAt: {
-        type: Date,
-      },
-
-      checkInLatitude: {
-        type: Number,
-      },
-
-      checkInLongitude: {
-        type: Number,
-      },
-
-      checkInDistanceMeters: {
-        type: Number,
-      },
-
-      checkOutLatitude: {
-        type: Number,
-      },
-
-      checkOutLongitude: {
-        type: Number,
-      },
-
-      checkOutDistanceMeters: {
-        type: Number,
-      },
-
-      totalWorkingMinutes: {
-        type: Number,
-        default: 0,
-      },
-
-      lateMinutes: {
-        type: Number,
-        default: 0,
-      },
-
-      earlyCheckoutMinutes: {
-        type: Number,
-        default: 0,
-      },
-
-      remarks: {
-        type: String,
-        trim: true,
-        maxlength: 2000,
-      },
-
-      isRegularized: {
-        type: Boolean,
-        default: false,
-        index: true,
-      },
-
-      regularizedBy: {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-      },
-
-      regularizedAt: {
-        type: Date,
-      },
+const attendanceSchema = new Schema<IAttendance>(
+  {
+    employee: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
     },
-    {
-      timestamps: true,
-    },
-  );
 
-  attendanceSchema.index(
+    branch: {
+      type: Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+      index: true,
+    },
+
+    date: {
+      type: String,
+      required: true,
+      index: true,
+    },
+
+    status: {
+      type: String,
+      enum: Object.values(ATTENDANCE_STATUS),
+      required: true,
+      default: ATTENDANCE_STATUS.PRESENT,
+      index: true,
+    },
+
+    workMode: {
+      type: String,
+      enum: Object.values(ATTENDANCE_WORK_MODE),
+      required: true,
+      index: true,
+    },
+
+    checkInAt: {
+      type: Date,
+    },
+
+    checkOutAt: {
+      type: Date,
+    },
+
+    checkInLatitude: {
+      type: Number,
+      min: -90,
+      max: 90,
+    },
+
+    checkInLongitude: {
+      type: Number,
+      min: -180,
+      max: 180,
+    },
+
+    checkOutLatitude: {
+      type: Number,
+      min: -90,
+      max: 90,
+    },
+
+    checkOutLongitude: {
+      type: Number,
+      min: -180,
+      max: 180,
+    },
+
+    checkInDistanceMeters: {
+      type: Number,
+      min: 0,
+    },
+
+    checkOutDistanceMeters: {
+      type: Number,
+      min: 0,
+    },
+
+    lateMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    earlyCheckoutMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    totalWorkingMinutes: {
+      type: Number,
+      min: 0,
+    },
+
+    remarks: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+attendanceSchema.index(
   {
     employee: 1,
-    attendanceDate: 1,
+    date: 1,
   },
   {
     unique: true,
@@ -181,22 +166,21 @@ const attendanceSchema =
 
 attendanceSchema.index({
   branch: 1,
-  attendanceDate: -1,
+  date: -1,
 });
 
 attendanceSchema.index({
   employee: 1,
-  attendanceDate: -1,
+  date: -1,
 });
 
 attendanceSchema.index({
   branch: 1,
   status: 1,
-  attendanceDate: -1,
+  date: -1,
 });
 
-export const Attendance =
-  mongoose.model<IAttendance>(
-    "Attendance",
-    attendanceSchema,
-  );
+export const Attendance = mongoose.model<IAttendance>(
+  "Attendance",
+  attendanceSchema,
+);

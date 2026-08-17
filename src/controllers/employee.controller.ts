@@ -1,8 +1,4 @@
-import type {
-  NextFunction,
-  Request,
-  Response,
-} from "express";
+import type { NextFunction, Request, Response } from "express";
 
 import {
   createEmployeeProfile,
@@ -44,161 +40,120 @@ export interface IPopulatedEmployeeProfile {
   // Add other required properties as needed
 }
 
-
-export const createEmployeeController =
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required",
-          code:
-            "AUTHENTICATION_REQUIRED",
-        });
-      }
-
-      const data =
-        createEmployeeProfileSchema.parse(
-          req.body,
-        );
-
-      const employee =
-        await createEmployeeProfile(
-          data,
-          {
-            userId: req.user.id,
-            role: req.user.role,
-            branches:
-              req.user.branches,
-          },
-        );
-
-      await createAuditLog({
-        actor: req.user.id,
-        action: "EMPLOYEE_CREATED",
-        entity: "EmployeeProfile",
-        entityId:
-          employee._id.toString(),
-        branch:
-          employee.branch.toString(),
-        metadata: {
-          employeeCode:
-            employee.employeeCode,
-          user:
-            employee.user.toString(),
-        },
-        ipAddress: req.ip,
-        userAgent:
-          req.get("user-agent"),
+export const createEmployeeController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        code: "AUTHENTICATION_REQUIRED",
       });
-
-      return res.status(201).json({
-        success: true,
-        message:
-          "Employee profile created successfully",
-        data: employee,
-      });
-    } catch (error) {
-      next(error);
     }
-  };
 
+    const data = createEmployeeProfileSchema.parse(req.body);
 
-export const getEmployeeController =
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required",
-        });
-      }
+    const employee = await createEmployeeProfile(data, {
+      userId: req.user.id,
+      role: req.user.role,
+      branches: req.user.branches,
+    });
 
-      const employeeId =
-        req.params.id;
+    await createAuditLog({
+      actor: req.user.id,
+      action: "EMPLOYEE_CREATED",
+      entity: "EmployeeProfile",
+      entityId: employee._id.toString(),
+      branch: employee.branch.toString(),
+      metadata: {
+        employeeCode: employee.employeeCode,
+        user: employee.user.toString(),
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
 
-      if (
-        typeof employeeId !==
-        "string"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid employee ID",
-          code:
-            "INVALID_EMPLOYEE_ID",
-        });
-      }
+    return res.status(201).json({
+      success: true,
+      message: "Employee profile created successfully",
+      data: employee,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
-      const employee =
-        await getEmployeeProfileById(
-          employeeId,
-          {
-            userId: req.user.id,
-            role: req.user.role,
-            branches:
-              req.user.branches,
-          },
-        );
-
-      return res.status(200).json({
-        success: true,
-        data: employee,
+export const getEmployeeController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
       });
-    } catch (error) {
-      next(error);
     }
-  };
 
+    const employeeId = req.params.id;
 
-export const listEmployeesController =
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Authentication required",
-        });
-      }
-
-      const query =
-        employeeListQuerySchema.parse(
-          req.query,
-        );
-
-      const result =
-        await listEmployees(
-          {
-            userId: req.user.id,
-            role: req.user.role,
-            branches:
-              req.user.branches,
-          },
-          query,
-        );
-
-      return res.status(200).json({
-        success: true,
-        data: result.items,
-        pagination:
-          result.pagination,
+    if (typeof employeeId !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid employee ID",
+        code: "INVALID_EMPLOYEE_ID",
       });
-    } catch (error) {
-      next(error);
     }
-  };
+
+    const employee = await getEmployeeProfileById(employeeId, {
+      userId: req.user.id,
+      role: req.user.role,
+      branches: req.user.branches,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: employee,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listEmployeesController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const query = employeeListQuerySchema.parse(req.query);
+
+    const result = await listEmployees(
+      {
+        userId: req.user.id,
+        role: req.user.role,
+        branches: req.user.branches,
+      },
+      query,
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: result.items,
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
