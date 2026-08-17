@@ -1,7 +1,7 @@
 import { Router } from "express";
-import branchRoutes from "./branch.routes";
+import branchRoutes from "./branch.routes.js";
 import authRoutes from "./auth.routes.js";
-import userRoutes from "./user.routes";
+import userRoutes from "./user.routes.js";
 import permissionRoutes from "./permission.route.js";
 import sessionRoutes from "./session.routes.js";
 import auditRoutes from "./audit.routes.js";
