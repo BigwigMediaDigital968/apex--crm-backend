@@ -9,6 +9,7 @@ import {
 import {
   EmployeeProfile,
   type IEmployeeDocument,
+  type ISalaryStructure,
 } from "../models/EmployeeProfile.js";
 
 import { User } from "../models/User.js";
@@ -44,6 +45,34 @@ interface CreateEmployeeInput {
   emergencyContactRelation?: string;
   documents?: IEmployeeDocument[]; // Fixed: unknown[] -> IEmployeeDocument[]
   salary: Record<string, number>;
+  bankDetails?: Record<string, string>;
+  notes?: string;
+}
+
+export interface UpdateEmployeeInput {
+  employeeCode?: string;
+  branchId?: string;
+  reportingManager?: string;
+  designation?: string;
+  department?: string;
+  employmentType?: EmploymentType;
+  employmentStatus?: EmploymentStatus;
+  joiningDate?: Date;
+  probationEndDate?: Date;
+  dateOfBirth?: Date;
+  gender?: Gender;
+  personalPhone?: string;
+  alternatePhone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContactRelation?: string;
+  documents?: IEmployeeDocument[];
+  salary?: Partial<ISalaryStructure>;
   bankDetails?: Record<string, string>;
   notes?: string;
 }
@@ -211,15 +240,228 @@ export const createEmployeeProfile = async (
   return employee;
 };
 
-export const getEmployeeProfileById = async (
+export const updateEmployeeProfile = async (
   employeeId: string,
+  data: UpdateEmployeeInput,
   context: AccessContext,
 ) => {
-  const employee = await EmployeeProfile.findById(employeeId)
+  // 1. Fetch existing profile
+  const employee = await EmployeeProfile.findById(employeeId);
+
+  if (!employee) {
+    throw new AppError("Employee profile not found", 404, "EMPLOYEE_NOT_FOUND");
+  }
+
+  // 2. Access control check on the existing employee's branch
+  assertBranchAccess(employee.branch.toString(), context);
+
+  // 3. Prevent standard employees from updating other profiles or critical fields
+  if (
+    context.role === ROLES.EMPLOYEE &&
+    employee.user.toString() !== context.userId
+  ) {
+    throw new AppError(
+      "You can only update your own employee profile",
+      403,
+      "EMPLOYEE_ACCESS_DENIED",
+    );
+  }
+
+  // 4. Validate branch update (if changing branch)
+  let targetBranchId = employee.branch.toString();
+  if (data.branchId && data.branchId !== targetBranchId) {
+    assertBranchAccess(data.branchId, context);
+
+    const branch = await Branch.findById(data.branchId);
+    if (!branch || !branch.isActive) {
+      throw new AppError(
+        "Target branch not found or inactive",
+        404,
+        "BRANCH_NOT_FOUND",
+      );
+    }
+    targetBranchId = data.branchId;
+    employee.branch = new Types.ObjectId(data.branchId);
+  }
+
+  // 5. Validate unique employee code (if updating)
+  if (
+    data.employeeCode &&
+    data.employeeCode.toUpperCase() !== employee.employeeCode
+  ) {
+    const existingCode = await EmployeeProfile.findOne({
+      employeeCode: data.employeeCode.toUpperCase(),
+      _id: { $ne: employeeId },
+    });
+
+    if (existingCode) {
+      throw new AppError(
+        "Employee code already exists",
+        409,
+        "EMPLOYEE_CODE_EXISTS",
+      );
+    }
+    employee.employeeCode = data.employeeCode.toUpperCase();
+  }
+
+  // 6. Validate reporting manager (if updating)
+  if (data.reportingManager !== undefined) {
+    if (data.reportingManager) {
+      const manager = await User.findById(data.reportingManager);
+
+      if (!manager) {
+        throw new AppError(
+          "Reporting manager not found",
+          404,
+          "MANAGER_NOT_FOUND",
+        );
+      }
+
+      if (manager.role !== ROLES.MANAGER) {
+        throw new AppError(
+          "Reporting manager must have manager role",
+          400,
+          "INVALID_REPORTING_MANAGER",
+        );
+      }
+
+      const managerHasBranch = manager.branches.some(
+        (id) => id.toString() === targetBranchId,
+      );
+
+      if (!managerHasBranch) {
+        throw new AppError(
+          "Reporting manager does not belong to this branch",
+          400,
+          "MANAGER_BRANCH_MISMATCH",
+        );
+      }
+
+      employee.reportingManager = new Types.ObjectId(data.reportingManager);
+    } else {
+      employee.reportingManager = undefined;
+    }
+  }
+
+  // 7. Update field mappings
+  if (data.designation !== undefined) employee.designation = data.designation;
+  if (data.department !== undefined) employee.department = data.department;
+  if (data.employmentType !== undefined)
+    employee.employmentType = data.employmentType;
+  if (data.employmentStatus !== undefined)
+    employee.employmentStatus = data.employmentStatus;
+  if (data.joiningDate !== undefined) employee.joiningDate = data.joiningDate;
+  if (data.probationEndDate !== undefined)
+    employee.probationEndDate = data.probationEndDate;
+  if (data.dateOfBirth !== undefined) employee.dateOfBirth = data.dateOfBirth;
+  if (data.gender !== undefined) employee.gender = data.gender;
+  if (data.personalPhone !== undefined)
+    employee.personalPhone = data.personalPhone;
+  if (data.alternatePhone !== undefined)
+    employee.alternatePhone = data.alternatePhone;
+  if (data.address !== undefined) employee.address = data.address;
+  if (data.city !== undefined) employee.city = data.city;
+  if (data.state !== undefined) employee.state = data.state;
+  if (data.country !== undefined) employee.country = data.country;
+  if (data.postalCode !== undefined) employee.postalCode = data.postalCode;
+  if (data.emergencyContactName !== undefined)
+    employee.emergencyContactName = data.emergencyContactName;
+  if (data.emergencyContactPhone !== undefined)
+    employee.emergencyContactPhone = data.emergencyContactPhone;
+  if (data.emergencyContactRelation !== undefined)
+    employee.emergencyContactRelation = data.emergencyContactRelation;
+  if (data.documents !== undefined) employee.documents = data.documents;
+  if (data.salary !== undefined) {
+    employee.salary = {
+      ...employee.salary,
+      ...data.salary,
+    };
+  }
+  if (data.bankDetails !== undefined) employee.bankDetails = data.bankDetails;
+  if (data.notes !== undefined) employee.notes = data.notes;
+
+  await employee.save();
+
+  return employee;
+};
+
+// export const getEmployeeProfileById = async (
+//   employeeId: string,
+//   context: AccessContext,
+// ) => {
+//   const employee = await EmployeeProfile.findById(employeeId)
+//     .populate("user", "name email role isActive")
+//     .populate("branch", "name code city state")
+//     .populate("reportingManager", "name email role")
+//     .populate({
+//       path: "leaveBalances",
+//       match: {
+//         year: new Date().getFullYear(),
+//       },
+//       populate: {
+//         path: "policy",
+//         select: "name code leaveType annualAllocation isPaid",
+//       },
+//     })
+//     .lean({ virtuals: true });
+
+//   if (!employee) {
+//     throw new AppError("Employee profile not found", 404, "EMPLOYEE_NOT_FOUND");
+//   }
+
+//   const branchId = employee.branch._id.toString();
+
+//   if (context.role !== ROLES.HEAD && !context.branches.includes(branchId)) {
+//     throw new AppError(
+//       "You do not have access to this employee",
+//       403,
+//       "EMPLOYEE_ACCESS_DENIED",
+//     );
+//   }
+
+//   if (
+//     context.role === ROLES.EMPLOYEE &&
+//     employee.user._id.toString() !== context.userId
+//   ) {
+//     throw new AppError(
+//       "You can only access your own employee profile",
+//       403,
+//       "EMPLOYEE_ACCESS_DENIED",
+//     );
+//   }
+
+//   return employee;
+// };
+
+export const getEmployeeProfileById = async (
+  identifier: string,
+  context: AccessContext,
+) => {
+  if (!Types.ObjectId.isValid(identifier)) {
+    throw new AppError("Invalid ID format", 400, "INVALID_ID_FORMAT");
+  }
+
+  // ✅ Search by either EmployeeProfile ID OR User ID
+  const employee = await EmployeeProfile.findOne({
+    $or: [
+      { _id: new Types.ObjectId(identifier) },
+      { user: new Types.ObjectId(identifier) },
+    ],
+  })
     .populate("user", "name email role isActive")
     .populate("branch", "name code city state")
     .populate("reportingManager", "name email role")
-    .lean();
+    .populate({
+      path: "leaveBalances",
+      match: {
+        year: new Date().getFullYear(),
+      },
+      populate: {
+        path: "policy",
+        select: "name code leaveType annualAllocation isPaid",
+      },
+    })
+    .lean({ virtuals: true });
 
   if (!employee) {
     throw new AppError("Employee profile not found", 404, "EMPLOYEE_NOT_FOUND");

@@ -4,11 +4,13 @@ import {
   createEmployeeProfile,
   getEmployeeProfileById,
   listEmployees,
+  updateEmployeeProfile,
 } from "../services/employee.service.js";
 
 import {
   createEmployeeProfileSchema,
   employeeListQuerySchema,
+  updateEmployeeProfileSchema,
 } from "../validators/employee.validator.js";
 
 import { createAuditLog } from "../services/audit.service.js";
@@ -86,7 +88,7 @@ export const createEmployeeController = async (
   }
 };
 
-export const getEmployeeController = async (
+export const updateEmployeeController = async (
   req: Request,
   res: Response,
   next: NextFunction,
@@ -96,6 +98,7 @@ export const getEmployeeController = async (
       return res.status(401).json({
         success: false,
         message: "Authentication required",
+        code: "AUTHENTICATION_REQUIRED",
       });
     }
 
@@ -109,7 +112,102 @@ export const getEmployeeController = async (
       });
     }
 
-    const employee = await getEmployeeProfileById(employeeId, {
+    // Validate update payload
+    const data = updateEmployeeProfileSchema.parse(req.body);
+
+    const updatedEmployee = await updateEmployeeProfile(employeeId, data, {
+      userId: req.user.id,
+      role: req.user.role,
+      branches: req.user.branches,
+    });
+
+    // Create audit log entry for the update operation
+    await createAuditLog({
+      actor: req.user.id,
+      action: "EMPLOYEE_UPDATED",
+      entity: "EmployeeProfile",
+      entityId: updatedEmployee._id.toString(),
+      branch: updatedEmployee.branch.toString(),
+      metadata: {
+        employeeCode: updatedEmployee.employeeCode,
+        updatedFields: Object.keys(data),
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee profile updated successfully",
+      data: updatedEmployee,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// export const getEmployeeController = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction,
+// ) => {
+//   try {
+//     if (!req.user) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Authentication required",
+//       });
+//     }
+
+//     const employeeId = req.params.id;
+
+//     if (typeof employeeId !== "string") {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid employee ID",
+//         code: "INVALID_EMPLOYEE_ID",
+//       });
+//     }
+
+//     const employee = await getEmployeeProfileById(employeeId, {
+//       userId: req.user.id,
+//       role: req.user.role,
+//       branches: req.user.branches,
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       data: employee,
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+export const getEmployeeController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { id } = req.params;
+
+    if (typeof id !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ID provided",
+        code: "INVALID_ID",
+      });
+    }
+
+    const employee = await getEmployeeProfileById(id, {
       userId: req.user.id,
       role: req.user.role,
       branches: req.user.branches,

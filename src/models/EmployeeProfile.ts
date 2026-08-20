@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
+import type { ILeaveBalance } from "./LeaveBalance.js";
 
 import {
   EMPLOYMENT_STATUS,
@@ -92,6 +93,8 @@ export interface IEmployeeProfile extends Document {
   bankDetails?: IBankDetails;
 
   notes?: string;
+
+  leaveBalances?: ILeaveBalance[];
 
   createdBy: Types.ObjectId;
 
@@ -433,6 +436,13 @@ const employeeProfileSchema = new Schema<IEmployeeProfile>(
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+    },
+
+    toObject: {
+      virtuals: true,
+    },
   },
 );
 
@@ -448,6 +458,13 @@ employeeProfileSchema.index({
 
 employeeProfileSchema.index({
   joiningDate: -1,
+});
+
+employeeProfileSchema.virtual("leaveBalances", {
+  ref: "LeaveBalance",
+  localField: "user",
+  foreignField: "employee",
+  justOne: false,
 });
 
 export const EmployeeProfile = mongoose.model<IEmployeeProfile>(

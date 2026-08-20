@@ -10,6 +10,7 @@ import {
   createEmployeeController,
   getEmployeeController,
   listEmployeesController,
+  updateEmployeeController,
 } from "../controllers/employee.controller.js";
 
 const router = Router();
@@ -19,6 +20,13 @@ router.post(
   authenticate,
   authorize(PERMISSIONS.EMPLOYEE_CREATE),
   createEmployeeController,
+);
+
+router.patch(
+  "/:id",
+  authenticate,
+  authorize(PERMISSIONS.EMPLOYEE_UPDATE),
+  updateEmployeeController,
 );
 
 router.get(

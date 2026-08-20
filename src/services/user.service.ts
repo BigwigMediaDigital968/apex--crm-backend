@@ -375,13 +375,65 @@ export const getUsers = async (
   };
 };
 
+// export const getUserById = async (
+//   userId: string,
+//   requestorId: string,
+//   requestorRole: string,
+// ) => {
+//   // Add any role-based access or branch-scoping checks if needed
+//   const user = await User.findById(userId).lean();
+//   return user;
+// };
+
 export const getUserById = async (
   userId: string,
   requestorId: string,
   requestorRole: string,
 ) => {
-  // Add any role-based access or branch-scoping checks if needed
-  const user = await User.findById(userId).lean();
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError("Invalid user ID", 400, "INVALID_USER_ID");
+  }
+
+  // 1. Fetch user with populated branches, excluding sensitive fields like password
+  const user = await User.findById(userId)
+    .select("_id name email role branches isActive createdAt updatedAt")
+    .populate("branches", "_id name code city state isActive")
+    .lean();
+
+  if (!user) {
+    throw new AppError("User not found", 404, "USER_NOT_FOUND");
+  }
+
+  // 2. Branch security scope enforcement (HEAD bypasses branch restriction)
+  if (requestorRole !== ROLES.HEAD) {
+    const requestor = await User.findById(requestorId).select("branches");
+
+    if (!requestor) {
+      throw new AppError("Requestor not found", 404, "REQUESTOR_NOT_FOUND");
+    }
+
+    const requestorBranchIds = (requestor.branches || []).map((b) =>
+      b.toString(),
+    );
+
+    const userBranchIds = (user.branches || []).map((b: any) =>
+      b._id ? b._id.toString() : b.toString(),
+    );
+
+    // Check if requestor shares at least one branch with target user
+    const hasBranchAccess = userBranchIds.some((bId: string) =>
+      requestorBranchIds.includes(bId),
+    );
+
+    if (!hasBranchAccess) {
+      throw new AppError(
+        "You do not have access to view this user",
+        403,
+        "USER_ACCESS_FORBIDDEN",
+      );
+    }
+  }
+
   return user;
 };
 

@@ -91,6 +91,32 @@ export const PERMISSIONS = {
   LEAD_FOLLOWUP_UPDATE: "lead:followup:update",
 
   // =========================================================
+  // Leave Management
+  // =========================================================
+
+  LEAVE_VIEW: "leave:view",
+  LEAVE_CREATE: "leave:create",
+  LEAVE_UPDATE: "leave:update",
+  LEAVE_CANCEL: "leave:cancel",
+
+  LEAVE_APPROVE: "leave:approve",
+  LEAVE_REJECT: "leave:reject",
+
+  LEAVE_MANAGE: "leave:manage",
+
+  LEAVE_BALANCE_VIEW: "leave:balance:view",
+  LEAVE_BALANCE_MANAGE: "leave:balance:manage",
+  LEAVE_BALANCE_TRANSACTION_VIEW: "leave:balance:transaction:view",
+
+  LEAVE_POLICY_VIEW: "leave:policy:view",
+  LEAVE_POLICY_CREATE: "leave:policy:create",
+  LEAVE_POLICY_UPDATE: "leave:policy:update",
+  LEAVE_POLICY_DELETE: "leave:policy:delete",
+
+  LEAVE_REPORT: "leave:report",
+  LEAVE_EXPORT: "leave:export",
+
+  // =========================================================
   // CUSTOMER MANAGEMENT
   // =========================================================
 
