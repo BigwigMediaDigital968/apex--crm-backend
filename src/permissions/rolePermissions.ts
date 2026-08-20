@@ -238,6 +238,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // Own / assigned users visibility
     PERMISSIONS.USER_VIEW,
 
+    // Branch
+    PERMISSIONS.BRANCH_VIEW,
+
     // Employee Details
     PERMISSIONS.EMPLOYEE_VIEW,
 
