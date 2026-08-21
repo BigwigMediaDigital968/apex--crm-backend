@@ -5,3 +5,10 @@ export const assignLeadSchema = z.object({
 });
 
 export type AssignLeadInput = z.infer<typeof assignLeadSchema>;
+
+export const assignLeadsBulkSchema = z.object({
+  leadIds: z
+    .array(z.string().min(1))
+    .min(1, "At least one Lead ID is required"),
+  employeeId: z.string().min(1, "Employee ID is required"),
+});

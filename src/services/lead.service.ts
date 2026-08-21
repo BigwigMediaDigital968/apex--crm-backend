@@ -15,19 +15,12 @@ import { AppError } from "../utils/AppError.js";
 import type { CreateLeadInput } from "../validators/lead.validator.js";
 
 import type { ListLeadQuery } from "../validators/lead.validator.js";
-import { LeadAssignment } from "../models/LeadAssignment.js";
 
 import {
   LeadActivity,
-  LEAD_ACTIVITY_TYPE,
   type LeadActivityType,
 } from "../models/LeadActivity.js";
 import mongoose from "mongoose";
-
-interface AssignLeadInput {
-  employeeId: string;
-  reason?: string;
-}
 
 export const createLead = async (
   data: CreateLeadInput,
@@ -483,277 +476,6 @@ export const getLeadById = async (leadId: string, user: AuthenticatedUser) => {
   return lead;
 };
 
-// export const assignLead = async (
-//   leadId: string,
-//   data: AssignLeadInput,
-//   user: AuthenticatedUser,
-// ) => {
-//   /**
-//    * ---------------------------------------------------------
-//    * Validate Lead ID
-//    * ---------------------------------------------------------
-//    */
-
-//   if (!Types.ObjectId.isValid(leadId)) {
-//     throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Validate Employee ID
-//    * ---------------------------------------------------------
-//    */
-
-//   if (!Types.ObjectId.isValid(data.employeeId)) {
-//     throw new AppError("Invalid employee ID", 400, "INVALID_EMPLOYEE_ID");
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Find Lead
-//    * ---------------------------------------------------------
-//    */
-
-//   const lead = await Lead.findById(leadId);
-
-//   if (!lead || lead.isDeleted) {
-//     throw new AppError("Lead not found", 404, "LEAD_NOT_FOUND");
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Find Target User
-//    * ---------------------------------------------------------
-//    */
-
-//   const employee = await User.findById(data.employeeId).select(
-//     "_id name email role branches isActive",
-//   );
-
-//   if (!employee) {
-//     throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Target must actually be an Employee
-//    * ---------------------------------------------------------
-//    */
-
-//   if (employee.role !== ROLES.EMPLOYEE) {
-//     throw new AppError(
-//       "Leads can only be assigned to employees",
-//       400,
-//       "INVALID_ASSIGNMENT_TARGET",
-//     );
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Employee must be active
-//    * ---------------------------------------------------------
-//    */
-
-//   if (!employee.isActive) {
-//     throw new AppError(
-//       "Cannot assign lead to an inactive employee",
-//       400,
-//       "EMPLOYEE_INACTIVE",
-//     );
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Employee must belong to Lead branch
-//    * ---------------------------------------------------------
-//    */
-
-//   const leadBranchId = lead.branch.toString();
-
-//   const employeeHasBranch = employee.branches.some(
-//     (branchId) => branchId.toString() === leadBranchId,
-//   );
-
-//   if (!employeeHasBranch) {
-//     throw new AppError(
-//       "Employee does not belong to the lead's branch",
-//       403,
-//       "EMPLOYEE_BRANCH_MISMATCH",
-//     );
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Assigning user's access
-//    * ---------------------------------------------------------
-//    */
-
-//   if (user.role !== ROLES.HEAD) {
-//     const hasBranchAccess = user.branches.includes(leadBranchId);
-
-//     if (!hasBranchAccess) {
-//       throw new AppError(
-//         "You do not have access to this lead's branch",
-//         403,
-//         "BRANCH_ACCESS_DENIED",
-//       );
-//     }
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Manager-specific protection
-//    * ---------------------------------------------------------
-//    */
-
-//   if (user.role === ROLES.MANAGER) {
-//     const managerHasBranch = user.branches.includes(leadBranchId);
-
-//     if (!managerHasBranch) {
-//       throw new AppError(
-//         "Manager can only assign leads within their branch",
-//         403,
-//         "BRANCH_ACCESS_DENIED",
-//       );
-//     }
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Prevent unnecessary reassignment
-//    * ---------------------------------------------------------
-//    */
-
-//   const previousAssignee = lead.assignedTo
-//     ? lead.assignedTo.toString()
-//     : undefined;
-
-//   if (previousAssignee === data.employeeId) {
-//     throw new AppError(
-//       "Lead is already assigned to this employee",
-//       409,
-//       "LEAD_ALREADY_ASSIGNED",
-//     );
-//   }
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Update Lead
-//    * ---------------------------------------------------------
-//    */
-
-//   lead.assignedTo = employee._id;
-
-//   lead.status = LEAD_STATUS.ASSIGNED;
-
-//   await lead.save();
-
-//   /**
-//    * ---------------------------------------------------------
-//    * Create Assignment History
-//    * ---------------------------------------------------------
-//    */
-
-//   await LeadAssignment.create({
-//     lead: lead._id,
-
-//     assignedTo: employee._id,
-
-//     assignedBy: new Types.ObjectId(user.id),
-
-//     branch: lead.branch,
-
-//     previousAssignee: previousAssignee
-//       ? new Types.ObjectId(previousAssignee)
-//       : undefined,
-
-//     reason: data.reason,
-//   });
-
-//   return lead;
-// };
-
-// export const updateLeadStatus = async (
-//   leadId: string,
-//   status: LeadStatus,
-//   remark: string | undefined,
-//   user: AuthenticatedUser,
-// ) => {
-//   if (!Types.ObjectId.isValid(leadId)) {
-//     throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
-//   }
-
-//   const lead = await Lead.findById(leadId);
-
-//   if (!lead || lead.isDeleted) {
-//     throw new AppError("Lead not found", 404, "LEAD_NOT_FOUND");
-//   }
-
-//   /**
-//    * Employee access
-//    */
-//   if (user.role === ROLES.EMPLOYEE) {
-//     if (!lead.assignedTo || lead.assignedTo.toString() !== user.id) {
-//       throw new AppError(
-//         "You can only update leads assigned to you",
-//         403,
-//         "LEAD_ACCESS_DENIED",
-//       );
-//     }
-//   }
-
-//   /**
-//    * Branch-level access
-//    */
-//   if (user.role !== ROLES.HEAD) {
-//     const hasBranchAccess = user.branches.includes(lead.branch.toString());
-
-//     if (!hasBranchAccess) {
-//       throw new AppError(
-//         "You do not have access to this lead",
-//         403,
-//         "BRANCH_ACCESS_DENIED",
-//       );
-//     }
-//   }
-
-//   const previousStatus = lead.status;
-
-//   if (previousStatus === status && !remark) {
-//     throw new AppError("No changes were provided", 400, "NO_CHANGES");
-//   }
-
-//   /**
-//    * Update current Lead state
-//    */
-//   lead.status = status;
-
-//   if (remark) {
-//     lead.remarks = remark;
-//   }
-
-//   await lead.save();
-
-//   /**
-//    * Record status history
-//    */
-//   await LeadActivity.create({
-//     lead: lead._id,
-
-//     activityType: LEAD_ACTIVITY_TYPE.STATUS_CHANGED,
-
-//     performedBy: new Types.ObjectId(user.id),
-
-//     previousStatus,
-
-//     newStatus: status,
-
-//     remark: remark || undefined,
-//   });
-
-//   return lead;
-// };
-
 export const updateLeadStatus = async ({
   leadId,
   status,
@@ -843,22 +565,16 @@ export const addLeadRemark = async ({
   return lead;
 };
 
-export const getLeadActivities =
-  async (
-    leadId: string,
-  ) => {
-    return LeadActivity.find({
-      lead: leadId,
+export const getLeadActivities = async (leadId: string) => {
+  return LeadActivity.find({
+    lead: leadId,
+  })
+    .populate("performedBy", "name email role")
+    .sort({
+      createdAt: -1,
     })
-      .populate(
-        "performedBy",
-        "name email role",
-      )
-      .sort({
-        createdAt: -1,
-      })
-      .lean();
-  };
+    .lean();
+};
 
 export const createLeadActivity = async ({
   leadId,

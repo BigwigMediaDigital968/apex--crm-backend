@@ -18,7 +18,7 @@ import {
   getMyPendingFollowUpsController,
 } from "../controllers/lead-followup.controller.js";
 
-import { assignLeadController } from "../controllers/lead-assignment.controller.js";
+import { assignLeadController, bulkAssignLeadsController } from "../controllers/lead-assignment.controller.js";
 
 import { importLeadsController } from "../controllers/lead-import.controller.js";
 
@@ -81,6 +81,14 @@ router.patch(
   authenticate,
   authorize(PERMISSIONS.LEAD_ASSIGN),
   assignLeadController,
+);
+
+// Bulk lead assignment
+router.patch(
+  "/bulk-assign",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_ASSIGN),
+  bulkAssignLeadsController,
 );
 
 router.patch(
