@@ -7,6 +7,7 @@ import { EmployeeProfile } from "../models/EmployeeProfile.js";
 import { ROLES } from "../constants/roles.js";
 import type { AuthenticatedUser } from "../types/auth.js";
 import { AppError } from "../utils/AppError.js";
+import { Lead } from "../models/Lead.js";
 
 // Validation Schemas
 export const createRevenueSchema = z.object({
@@ -29,6 +30,7 @@ export const updateRevenueStatusSchema = z.object({
 
 export const revenueQuerySchema = z.object({
   targetUserId: z.string().optional(),
+  employeeId: z.string().optional(),
   branchId: z.string().optional(),
   leadId: z.string().optional(),
   status: z
@@ -44,6 +46,28 @@ export const revenueQuerySchema = z.object({
     .enum(["INDIVIDUAL", "TEAM", "BRANCH", "LEAD"])
     .default("INDIVIDUAL"),
 });
+
+// Helper: Resolve Employee User ID (Supports User ID or EmployeeProfile lookup)
+const resolveUserId = async (id: string): Promise<Types.ObjectId> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new AppError("Invalid user ID format", 400, "INVALID_ID");
+  }
+
+  // 1. Check if ID directly matches a User
+  const directUser = await User.findById(id).select("_id").lean();
+  if (directUser) return directUser._id as Types.ObjectId;
+
+  // 2. Check if ID matches an EmployeeProfile
+  const profile = await EmployeeProfile.findOne({
+    $or: [{ _id: new Types.ObjectId(id) }, { user: new Types.ObjectId(id) }],
+  })
+    .select("user")
+    .lean();
+
+  if (profile) return profile.user;
+
+  throw new AppError("Target employee not found", 404, "EMPLOYEE_NOT_FOUND");
+};
 
 // 1. Create Revenue Entry
 export const createRevenueEntry = async (
@@ -71,10 +95,11 @@ export const createRevenueEntry = async (
     notes,
   } = result.data;
 
-  const targetEmployeeId = employeeId || requestor.id;
+  const rawTargetId = employeeId || requestor.id;
+  const targetUserId = await resolveUserId(rawTargetId);
 
-  // Authorization checks for creation target
-  if (requestor.role === ROLES.EMPLOYEE && targetEmployeeId !== requestor.id) {
+  // Authorization check for target employee
+  if (requestor.role === ROLES.EMPLOYEE && targetUserId.toString() !== requestor.id) {
     throw new AppError(
       "Employees can only log revenue for themselves",
       403,
@@ -82,7 +107,30 @@ export const createRevenueEntry = async (
     );
   }
 
-  const employeeUser = await User.findById(targetEmployeeId).lean();
+  // Lead Ownership Check with Optional Chaining Fix
+  if (leadId) {
+    if (!Types.ObjectId.isValid(leadId)) {
+      throw new AppError("Invalid lead ID format", 400, "INVALID_LEAD_ID");
+    }
+
+    const lead = await Lead.findById(leadId).lean();
+    if (!lead || lead.isDeleted) {
+      throw new AppError("Associated lead not found", 404, "LEAD_NOT_FOUND");
+    }
+
+    if (
+      requestor.role === ROLES.EMPLOYEE &&
+      (!lead.assignedTo || lead.assignedTo.toString() !== requestor.id)
+    ) {
+      throw new AppError(
+        "You can only log revenue for leads assigned to you",
+        403,
+        "LEAD_ACCESS_DENIED",
+      );
+    }
+  }
+
+  const employeeUser = await User.findById(targetUserId).lean();
   if (!employeeUser || !employeeUser.isActive) {
     throw new AppError(
       "Target employee not found or inactive",
@@ -132,6 +180,7 @@ export const getRevenueReport = async (
 
   const {
     targetUserId,
+    employeeId,
     branchId,
     leadId,
     status,
@@ -173,16 +222,38 @@ export const getRevenueReport = async (
   let scopeInfo: Record<string, unknown> = { viewMode };
 
   if (viewMode === "INDIVIDUAL") {
-    const resolvedUserId = targetUserId || requestor.id;
-    if (requestor.role === ROLES.EMPLOYEE && requestor.id !== resolvedUserId) {
+    const rawId = targetUserId || employeeId || requestor.id;
+    const resolvedId = await resolveUserId(rawId);
+
+    if (
+      requestor.role === ROLES.EMPLOYEE &&
+      resolvedId.toString() !== requestor.id
+    ) {
       throw new AppError(
         "Access denied to individual metrics",
         403,
         "ACCESS_DENIED",
       );
     }
-    targetUserIds = [new Types.ObjectId(resolvedUserId)];
-    scopeInfo.targetUserId = resolvedUserId;
+
+    if (requestor.role === ROLES.MANAGER) {
+      if (resolvedId.toString() !== requestor.id) {
+        const isSubordinate = await EmployeeProfile.exists({
+          user: resolvedId,
+          reportingManager: new Types.ObjectId(requestor.id),
+        });
+        if (!isSubordinate) {
+          throw new AppError(
+            "Managers can only view revenue of their team members",
+            403,
+            "ACCESS_DENIED",
+          );
+        }
+      }
+    }
+
+    targetUserIds = [resolvedId];
+    scopeInfo.targetUserId = resolvedId;
   } else if (viewMode === "TEAM") {
     if (requestor.role === ROLES.EMPLOYEE) {
       throw new AppError(
@@ -191,17 +262,23 @@ export const getRevenueReport = async (
         "ACCESS_DENIED",
       );
     }
-    const managerId = targetUserId || requestor.id;
+    const rawManagerId = targetUserId || employeeId || requestor.id;
+    const managerId = await resolveUserId(rawManagerId);
+
     const teamProfiles = await EmployeeProfile.find({
-      reportingManager: new Types.ObjectId(managerId),
+      reportingManager: managerId,
     })
       .select("user")
       .lean();
+
     targetUserIds = teamProfiles.map((p) => p.user);
-    targetUserIds.push(new Types.ObjectId(managerId));
+    targetUserIds.push(managerId);
     scopeInfo.teamSize = targetUserIds.length;
   } else if (viewMode === "BRANCH") {
-    if (requestor.role === ROLES.EMPLOYEE || requestor.role === ROLES.MANAGER) {
+    if (
+      requestor.role === ROLES.EMPLOYEE ||
+      requestor.role === ROLES.MANAGER
+    ) {
       throw new AppError(
         "Only Admins and Head can access full branch revenue",
         403,
@@ -236,7 +313,7 @@ export const getRevenueReport = async (
     })
       .select("_id")
       .lean();
-    targetUserIds = branchUsers.map((u) => u._id);
+    targetUserIds = branchUsers.map((u) => u._id as Types.ObjectId);
     scopeInfo.branchId = selectedBranch;
   }
 

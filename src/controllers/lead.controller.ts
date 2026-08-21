@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { CallLog } from "../models/CallLog.js";
 
 import {
   createLead,
@@ -19,7 +20,6 @@ import {
 } from "../validators/lead.validator.js";
 
 import { createAuditLog } from "../services/audit.service.js";
-import { LeadStatus } from "../constants/leadStatus.js";
 
 export const createLeadController = async (
   req: Request,
@@ -88,6 +88,27 @@ export const createLeadController = async (
   }
 };
 
+
+export const getLeadCallLogs = async (req: Request, res: Response) => {
+  try {
+    const { leadId } = req.params;
+
+    // Filter by branch to enforce RBAC
+    const filter: any = { lead: leadId };
+    if (req.user?.role !== "head") {
+      filter.branch = req.user?.branches;
+    }
+
+    const callHistory = await CallLog.find(filter)
+      .populate("caller", "name email role")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, data: callHistory });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 export const listLeadsController = async (
   req: Request,
   res: Response,
@@ -151,60 +172,6 @@ export const getLeadController = async (
     next(error);
   }
 };
-
-// export const assignLeadController = async (
-//   req: Request,
-//   res: Response,
-//   next: NextFunction,
-// ) => {
-//   try {
-//     if (!req.user) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "Authentication required",
-//         code: "AUTHENTICATION_REQUIRED",
-//       });
-//     }
-
-//     const leadId = req.params.id;
-
-//     if (!leadId || Array.isArray(leadId)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid lead ID",
-//         code: "INVALID_LEAD_ID",
-//       });
-//     }
-
-//     const data = assignLeadSchema.parse(req.body || {});
-
-//     const lead = await assignLead(leadId, data, req.user);
-
-//     await createAuditLog({
-//       actor: req.user.id,
-//       action: "LEAD_ASSIGNED",
-//       entity: "Lead",
-//       entityId: lead._id.toString(),
-//       branch: lead.branch.toString(),
-//       metadata: {
-//         assignedTo: lead.assignedTo?.toString(),
-//         reason: data.reason,
-//       },
-//       ipAddress: req.ip,
-//       userAgent: req.get("user-agent"),
-//     });
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Lead assigned successfully",
-//       data: {
-//         lead,
-//       },
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 
 export const updateLeadStatusController = async (
   req: Request,

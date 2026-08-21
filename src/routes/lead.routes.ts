@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   createLeadController,
+  getLeadCallLogs,
   listLeadsController,
   getLeadController,
   // assignLeadController,
@@ -37,6 +38,8 @@ router.post(
   authorize(PERMISSIONS.LEAD_CREATE),
   createLeadController,
 );
+
+router.get("/:leadId/calls", authenticate, getLeadCallLogs);
 
 router.get(
   "/",
