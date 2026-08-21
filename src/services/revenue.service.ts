@@ -367,7 +367,7 @@ export const updateRevenueStatus = async (
   revenueId: string,
   rawData: unknown,
 ) => {
-  if (requestor.role !== ROLES.ADMIN && requestor.role !== ROLES.HEAD) {
+  if (requestor.role !== ROLES.ADMIN && requestor.role !== ROLES.HEAD && requestor.role !== ROLES.MANAGER) {
     throw new AppError(
       "Only Admins and Head can verify or reject revenue",
       403,
