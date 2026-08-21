@@ -94,9 +94,9 @@ export const createLead = async (
     isActive: true,
   });
 
-  if (!branch) {
-    throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
-  }
+  // if (!branch) {
+  //   throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
+  // }
 
   /**
    * ---------------------------------------------------------
