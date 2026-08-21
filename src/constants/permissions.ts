@@ -91,6 +91,13 @@ export const PERMISSIONS = {
   LEAD_FOLLOWUP_UPDATE: "lead:followup:update",
 
   // =========================================================
+  // DIALER / CALL MANAGEMENT
+  // =========================================================
+  CALL_INITIATE: "call:initiate",
+  CALL_LOG_VIEW: "call-log:view",
+  CALL_RECORDING_LISTEN: "call-recording:listen",
+
+  // =========================================================
   // Leave Management
   // =========================================================
 

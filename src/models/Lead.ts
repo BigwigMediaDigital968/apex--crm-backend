@@ -144,7 +144,7 @@ const leadSchema = new Schema<ILead>(
     branch: {
       type: Schema.Types.ObjectId,
       ref: "Branch",
-      required: true,
+      // required: true,
       index: true,
     },
 

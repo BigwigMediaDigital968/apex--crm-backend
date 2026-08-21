@@ -9,6 +9,7 @@ export const LEAD_ACTIVITY_TYPE = {
   STATUS_CHANGED: "status_changed",
   REMARK_ADDED: "remark_added",
   FOLLOW_UP: "follow_up",
+  CALL_LOGGED: "call_logged",
 } as const;
 
 export type LeadActivityType =
