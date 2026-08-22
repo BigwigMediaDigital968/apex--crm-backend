@@ -7,6 +7,8 @@ import { User, type IUser } from "../models/User.js";
 import { AppError } from "../utils/AppError.js";
 import { ROLE_HIERARCHY, canManageRole } from "../permissions/roleHierarchy.js";
 import type { UpdateUserInput, UserListQuery } from "../types/user.js";
+import { notify } from "../services/notification.service.js";
+import { NOTIFICATION_TYPES } from "../models/Notification.js";
 
 interface CreateUserInput {
   name: string;
@@ -132,6 +134,17 @@ export const createUser = async (
     branches: validBranchIds,
     createdBy: new Types.ObjectId(creatorId),
     isActive: true,
+  });
+
+  await notify({
+    roles: [ROLES.HEAD, ROLES.ADMIN],
+    branchId: user.branches[0], // Restricts Admin alert to that branch only
+    senderId: creatorId,
+    type: NOTIFICATION_TYPES.EMPLOYEE_CREATED,
+    title: "New Employee Joined",
+    message: `${user.name} was added to the team.`,
+    entityId: user._id,
+    entityType: "User",
   });
 
   return user;
@@ -374,16 +387,6 @@ export const getUsers = async (
     },
   };
 };
-
-// export const getUserById = async (
-//   userId: string,
-//   requestorId: string,
-//   requestorRole: string,
-// ) => {
-//   // Add any role-based access or branch-scoping checks if needed
-//   const user = await User.findById(userId).lean();
-//   return user;
-// };
 
 export const getUserById = async (
   userId: string,

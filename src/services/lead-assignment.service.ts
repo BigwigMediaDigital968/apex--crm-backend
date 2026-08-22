@@ -128,7 +128,7 @@ import { User } from "../models/User.js";
 import { EmployeeProfile } from "../models/EmployeeProfile.js";
 import { ROLES } from "../constants/roles.js";
 import { AppError } from "../utils/AppError.js";
-import { EMPLOYMENT_STATUS } from "../constants/employee.js";
+import { EMPLOYMENT_STATUS, EmploymentStatus } from "../constants/employee.js";
 
 /**
  * Validates that the provided ID belongs to an existing, active EmployeeProfile
@@ -149,10 +149,16 @@ const resolveEmployeeProfile = async (employeeProfileId: string) => {
     throw new AppError("Employee does not exist", 404, "EMPLOYEE_NOT_EXISTS");
   }
 
-  // 2. Check if employment status is active
-  if (profileDoc.employmentStatus !== EMPLOYMENT_STATUS.ACTIVE) {
+  // Define invalid employment statuses for lead assignment
+  const DISALLOWED_STATUSES: EmploymentStatus[] = [
+    EMPLOYMENT_STATUS.TERMINATED,
+    EMPLOYMENT_STATUS.RESIGNED,
+    EMPLOYMENT_STATUS.INACTIVE,
+  ];
+
+  if (DISALLOWED_STATUSES.includes(profileDoc.employmentStatus)) {
     throw new AppError(
-      "Cannot assign leads to an inactive employee",
+      `Cannot assign leads to an employee with status '${profileDoc.employmentStatus}'`,
       400,
       "EMPLOYEE_INACTIVE",
     );
