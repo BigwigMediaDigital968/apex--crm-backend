@@ -121,13 +121,66 @@
 // return lead;
 // };
 
-
 import mongoose from "mongoose";
 import { LeadAssignmentHistory } from "../models/LeadAssignmentHistory.js";
 import { Lead } from "../models/Lead.js";
 import { User } from "../models/User.js";
+import { EmployeeProfile } from "../models/EmployeeProfile.js";
 import { ROLES } from "../constants/roles.js";
 import { AppError } from "../utils/AppError.js";
+import { EMPLOYMENT_STATUS } from "../constants/employee.js";
+
+/**
+ * Validates that the provided ID belongs to an existing, active EmployeeProfile
+ * and returns the underlying active User document.
+ */
+const resolveEmployeeProfile = async (employeeProfileId: string) => {
+  if (!mongoose.Types.ObjectId.isValid(employeeProfileId)) {
+    throw new AppError(
+      "Invalid Employee Profile ID format",
+      400,
+      "INVALID_EMPLOYEE_ID",
+    );
+  }
+
+  // 1. Check if the profile exists in EmployeeProfile
+  const profileDoc = await EmployeeProfile.findById(employeeProfileId).lean();
+  if (!profileDoc) {
+    throw new AppError("Employee does not exist", 404, "EMPLOYEE_NOT_EXISTS");
+  }
+
+  // 2. Check if employment status is active
+  if (profileDoc.employmentStatus !== EMPLOYMENT_STATUS.ACTIVE) {
+    throw new AppError(
+      "Cannot assign leads to an inactive employee",
+      400,
+      "EMPLOYEE_INACTIVE",
+    );
+  }
+
+  // 3. Fetch the linked User record to verify role and system access
+  const user = await User.findOne({ _id: profileDoc.user, isActive: true })
+    .select("_id name email role branches isActive")
+    .lean();
+
+  if (!user) {
+    throw new AppError(
+      "Linked user account is inactive or missing",
+      400,
+      "USER_ACCOUNT_UNAVAILABLE",
+    );
+  }
+
+  if (user.role !== ROLES.EMPLOYEE) {
+    throw new AppError(
+      "Lead can only be assigned to a user with the EMPLOYEE role",
+      400,
+      "INVALID_ASSIGNMENT_TARGET",
+    );
+  }
+
+  return user;
+};
 
 // Single Assignment Service
 export const assignLead = async ({
@@ -142,28 +195,18 @@ export const assignLead = async ({
   if (!mongoose.Types.ObjectId.isValid(leadId)) {
     throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
   }
-  if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-    throw new AppError("Invalid employee ID", 400, "INVALID_EMPLOYEE_ID");
-  }
+
+  // Resolve the EmployeeProfile ID to get the linked active User
+  const targetUser = await resolveEmployeeProfile(employeeId);
 
   const lead = await Lead.findOne({ _id: leadId, isDeleted: false });
   if (!lead) {
     throw new AppError("Lead not found", 404, "LEAD_NOT_FOUND");
   }
 
-  const employee = await User.findOne({ _id: employeeId, isActive: true })
-    .select("_id name email role branches isActive")
+  const actor = await User.findById(actorId)
+    .select("_id role branches isActive")
     .lean();
-
-  if (!employee) {
-    throw new AppError("Employee not found or inactive", 404, "EMPLOYEE_NOT_FOUND");
-  }
-
-  if (employee.role !== ROLES.EMPLOYEE) {
-    throw new AppError("Lead can only be assigned to an employee", 400, "INVALID_ASSIGNMENT_TARGET");
-  }
-
-  const actor = await User.findById(actorId).select("_id role branches isActive").lean();
   if (!actor) {
     throw new AppError("Assigning user not found", 401, "ACTOR_NOT_FOUND");
   }
@@ -173,27 +216,36 @@ export const assignLead = async ({
 
   const isHead = actor.role === ROLES.HEAD;
 
-  // Validate branch assignment rules ONLY if actor is NOT HEAD
+  // Branch checks for non-HEAD roles
   if (!isHead) {
-    const employeeBelongsToBranch = employee.branches.some(
-      (branch) => branch.toString() === lead.branch.toString()
+    const employeeBelongsToBranch = targetUser.branches.some(
+      (branch) => branch.toString() === lead.branch.toString(),
     );
     if (!employeeBelongsToBranch) {
-      throw new AppError("Employee does not belong to the lead's branch", 403, "CROSS_BRANCH_ASSIGNMENT");
+      throw new AppError(
+        "Employee does not belong to the lead's branch",
+        403,
+        "CROSS_BRANCH_ASSIGNMENT",
+      );
     }
 
     const actorHasBranchAccess = actor.branches.some(
-      (branch) => branch.toString() === lead.branch.toString()
+      (branch) => branch.toString() === lead.branch.toString(),
     );
     if (!actorHasBranchAccess) {
-      throw new AppError("You do not have access to this lead's branch", 403, "BRANCH_ACCESS_DENIED");
+      throw new AppError(
+        "You do not have access to this lead's branch",
+        403,
+        "BRANCH_ACCESS_DENIED",
+      );
     }
   }
 
   const previousAssignee = lead.assignedTo || undefined;
   const now = new Date();
 
-  lead.assignedTo = new mongoose.Types.ObjectId(employeeId);
+  // Assign using the User ID linked to the EmployeeProfile
+  lead.assignedTo = targetUser._id;
   lead.assignedBy = new mongoose.Types.ObjectId(actorId);
   lead.assignedAt = now;
 
@@ -201,7 +253,7 @@ export const assignLead = async ({
 
   await LeadAssignmentHistory.create({
     lead: lead._id,
-    assignedTo: new mongoose.Types.ObjectId(employeeId),
+    assignedTo: targetUser._id,
     assignedBy: new mongoose.Types.ObjectId(actorId),
     branch: lead.branch,
     previousAssignee,
@@ -222,36 +274,50 @@ export const assignLeadsBulk = async ({
   actorId: string;
 }) => {
   if (!Array.isArray(leadIds) || leadIds.length === 0) {
-    throw new AppError("Lead IDs must be a non-empty array", 400, "INVALID_LEAD_IDS");
+    throw new AppError(
+      "Lead IDs must be a non-empty array",
+      400,
+      "INVALID_LEAD_IDS",
+    );
   }
 
-  const validLeadIds = leadIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+  const validLeadIds = leadIds.filter((id) =>
+    mongoose.Types.ObjectId.isValid(id),
+  );
   if (validLeadIds.length !== leadIds.length) {
-    throw new AppError("One or more Lead IDs are invalid", 400, "INVALID_LEAD_IDS");
+    throw new AppError(
+      "One or more Lead IDs are invalid",
+      400,
+      "INVALID_LEAD_IDS",
+    );
   }
 
-  if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-    throw new AppError("Invalid employee ID", 400, "INVALID_EMPLOYEE_ID");
-  }
+  // Resolve the EmployeeProfile ID to get the linked active User
+  const targetUser = await resolveEmployeeProfile(employeeId);
 
-  const actor = await User.findById(actorId).select("_id role branches isActive").lean();
-  if (!actor || !actor.isActive) {
-    throw new AppError("Assigning user is invalid or inactive", 403, "UNAUTHORIZED_ACTOR");
-  }
-
-  const employee = await User.findOne({ _id: employeeId, isActive: true })
-    .select("_id name email role branches isActive")
+  const actor = await User.findById(actorId)
+    .select("_id role branches isActive")
     .lean();
-
-  if (!employee || employee.role !== ROLES.EMPLOYEE) {
-    throw new AppError("Target employee is invalid or inactive", 400, "INVALID_EMPLOYEE");
+  if (!actor || !actor.isActive) {
+    throw new AppError(
+      "Assigning user is invalid or inactive",
+      403,
+      "UNAUTHORIZED_ACTOR",
+    );
   }
 
   const isHead = actor.role === ROLES.HEAD;
 
-  const leads = await Lead.find({ _id: { $in: validLeadIds }, isDeleted: false });
+  const leads = await Lead.find({
+    _id: { $in: validLeadIds },
+    isDeleted: false,
+  });
   if (leads.length === 0) {
-    throw new AppError("No valid leads found for assignment", 404, "LEADS_NOT_FOUND");
+    throw new AppError(
+      "No valid leads found for assignment",
+      404,
+      "LEADS_NOT_FOUND",
+    );
   }
 
   const now = new Date();
@@ -260,18 +326,18 @@ export const assignLeadsBulk = async ({
 
   for (const lead of leads) {
     if (!isHead) {
-      const employeeBelongs = employee.branches.some(
-        (b) => b.toString() === lead.branch.toString()
+      const employeeBelongs = targetUser.branches.some(
+        (b) => b.toString() === lead.branch.toString(),
       );
       const actorHasAccess = actor.branches.some(
-        (b) => b.toString() === lead.branch.toString()
+        (b) => b.toString() === lead.branch.toString(),
       );
 
       if (!employeeBelongs || !actorHasAccess) {
         throw new AppError(
           `Cross-branch assignment denied for lead ID: ${lead._id}`,
           403,
-          "BRANCH_ACCESS_DENIED"
+          "BRANCH_ACCESS_DENIED",
         );
       }
     }
@@ -281,7 +347,7 @@ export const assignLeadsBulk = async ({
         filter: { _id: lead._id },
         update: {
           $set: {
-            assignedTo: new mongoose.Types.ObjectId(employeeId),
+            assignedTo: targetUser._id, // Assign to the linked User ID
             assignedBy: new mongoose.Types.ObjectId(actorId),
             assignedAt: now,
           },
@@ -291,7 +357,7 @@ export const assignLeadsBulk = async ({
 
     historyDocs.push({
       lead: lead._id,
-      assignedTo: new mongoose.Types.ObjectId(employeeId),
+      assignedTo: targetUser._id,
       assignedBy: new mongoose.Types.ObjectId(actorId),
       branch: lead.branch,
       previousAssignee: lead.assignedTo || undefined,
