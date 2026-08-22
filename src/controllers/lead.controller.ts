@@ -88,7 +88,6 @@ export const createLeadController = async (
   }
 };
 
-
 export const getLeadCallLogs = async (req: Request, res: Response) => {
   try {
     const { leadId } = req.params;

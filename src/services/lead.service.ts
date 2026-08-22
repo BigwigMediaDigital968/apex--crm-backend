@@ -1,54 +1,192 @@
 import { Types } from "mongoose";
-
 import { Lead } from "../models/Lead.js";
 import { User } from "../models/User.js";
 import { Branch } from "../models/Branch.js";
-
 import { LEAD_STATUS, type LeadStatus } from "../constants/leadStatus.js";
-
 import { ROLES } from "../constants/roles.js";
-
 import type { AuthenticatedUser } from "../types/auth.js";
-
 import { AppError } from "../utils/AppError.js";
-
 import type { CreateLeadInput } from "../validators/lead.validator.js";
-
 import type { ListLeadQuery } from "../validators/lead.validator.js";
-
-import {
-  LeadActivity,
-  type LeadActivityType,
-} from "../models/LeadActivity.js";
+import { LeadActivity, type LeadActivityType } from "../models/LeadActivity.js";
 import mongoose from "mongoose";
+import { LeadAssignmentHistory } from "../models/LeadAssignmentHistory.js";
+
+// export const createLead = async (
+//   data: CreateLeadInput,
+//   user: AuthenticatedUser,
+// ) => {
+//   /**
+//    * ---------------------------------------------------------
+//    * 1. Resolve branch
+//    * ---------------------------------------------------------
+//    */
+
+//   let branchId: string | undefined;
+
+//   /**
+//    * HEAD / ADMIN
+//    *
+//    * They can explicitly provide a branch.
+//    */
+
+//   if (user.role === ROLES.HEAD || user.role === ROLES.ADMIN) {
+//     branchId = data.branchId;
+//   }
+
+//   /**
+//    * MANAGER / EMPLOYEE
+//    *
+//    * Their branch comes from their account.
+//    */
+
+//   if (user.role === ROLES.MANAGER || user.role === ROLES.EMPLOYEE) {
+//     if (!user.branches || user.branches.length === 0) {
+//       throw new AppError(
+//         "User is not assigned to any branch",
+//         403,
+//         "BRANCH_NOT_ASSIGNED",
+//       );
+//     }
+
+//     branchId = user.branches[0];
+//   }
+
+//   if (!branchId) {
+//     throw new AppError("Branch is required", 400, "BRANCH_REQUIRED");
+//   }
+
+//   /**
+//    * ---------------------------------------------------------
+//    * 2. Validate ObjectId
+//    * ---------------------------------------------------------
+//    */
+
+//   if (!Types.ObjectId.isValid(branchId)) {
+//     throw new AppError("Invalid branch ID", 400, "INVALID_BRANCH_ID");
+//   }
+
+//   /**
+//    * ---------------------------------------------------------
+//    * 3. Verify branch exists
+//    * ---------------------------------------------------------
+//    */
+
+//   const branch = await Branch.findOne({
+//     _id: branchId,
+//     isActive: true,
+//   });
+
+//   // if (!branch) {
+//   //   throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
+//   // }
+
+//   /**
+//    * ---------------------------------------------------------
+//    * 4. Verify user has access to branch
+//    * ---------------------------------------------------------
+//    */
+
+//   if (user.role !== ROLES.HEAD) {
+//     const hasBranchAccess = user.branches?.some(
+//       (id) => id.toString() === branchId,
+//     );
+
+//     if (!hasBranchAccess) {
+//       throw new AppError(
+//         "You do not have access to this branch",
+//         403,
+//         "BRANCH_ACCESS_DENIED",
+//       );
+//     }
+//   }
+
+//   /**
+//    * ---------------------------------------------------------
+//    * 5. Normalize phone
+//    * ---------------------------------------------------------
+//    */
+
+//   const normalizedPhone = data.phone.replace(/\D/g, "");
+
+//   /**
+//    * ---------------------------------------------------------
+//    * 6. Duplicate detection
+//    *
+//    * For now we check:
+//    *
+//    * branch + country code + phone
+//    *
+//    * Later we'll make this more sophisticated.
+//    * ---------------------------------------------------------
+//    */
+
+//   const existingLead = await Lead.findOne({
+//     branch: branchId,
+//     phoneCountryCode: data.phoneCountryCode,
+//     phone: normalizedPhone,
+//     isDeleted: false,
+//   });
+
+//   if (existingLead) {
+//     throw new AppError(
+//       "A lead with this phone number already exists in this branch",
+//       409,
+//       "LEAD_ALREADY_EXISTS",
+//     );
+//   }
+
+//   /**
+//    * ---------------------------------------------------------
+//    * 7. Create Lead
+//    * ---------------------------------------------------------
+//    */
+
+//   const lead = await Lead.create({
+//     name: data.name,
+
+//     phoneCountryCode: data.phoneCountryCode,
+
+//     phone: normalizedPhone,
+
+//     email: data.email || undefined,
+
+//     city: data.city || undefined,
+
+//     industry: data.industry || undefined,
+
+//     message: data.message || undefined,
+
+//     remarks: data.remarks || undefined,
+
+//     source: data.source,
+
+//     sourceType: data.sourceType,
+
+//     branch: new Types.ObjectId(branchId),
+
+//     createdBy: new Types.ObjectId(user.id),
+
+//     status: LEAD_STATUS.NEW,
+
+//     isDeleted: false,
+//   });
+
+//   return lead;
+// };
 
 export const createLead = async (
   data: CreateLeadInput,
   user: AuthenticatedUser,
 ) => {
   /**
-   * ---------------------------------------------------------
    * 1. Resolve branch
-   * ---------------------------------------------------------
    */
-
   let branchId: string | undefined;
-
-  /**
-   * HEAD / ADMIN
-   *
-   * They can explicitly provide a branch.
-   */
 
   if (user.role === ROLES.HEAD || user.role === ROLES.ADMIN) {
     branchId = data.branchId;
   }
-
-  /**
-   * MANAGER / EMPLOYEE
-   *
-   * Their branch comes from their account.
-   */
 
   if (user.role === ROLES.MANAGER || user.role === ROLES.EMPLOYEE) {
     if (!user.branches || user.branches.length === 0) {
@@ -67,36 +205,27 @@ export const createLead = async (
   }
 
   /**
-   * ---------------------------------------------------------
    * 2. Validate ObjectId
-   * ---------------------------------------------------------
    */
-
   if (!Types.ObjectId.isValid(branchId)) {
     throw new AppError("Invalid branch ID", 400, "INVALID_BRANCH_ID");
   }
 
   /**
-   * ---------------------------------------------------------
    * 3. Verify branch exists
-   * ---------------------------------------------------------
    */
-
   const branch = await Branch.findOne({
     _id: branchId,
     isActive: true,
   });
 
-  // if (!branch) {
-  //   throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
-  // }
+  if (!branch) {
+    throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
+  }
 
   /**
-   * ---------------------------------------------------------
    * 4. Verify user has access to branch
-   * ---------------------------------------------------------
    */
-
   if (user.role !== ROLES.HEAD) {
     const hasBranchAccess = user.branches?.some(
       (id) => id.toString() === branchId,
@@ -112,25 +241,13 @@ export const createLead = async (
   }
 
   /**
-   * ---------------------------------------------------------
    * 5. Normalize phone
-   * ---------------------------------------------------------
    */
-
   const normalizedPhone = data.phone.replace(/\D/g, "");
 
   /**
-   * ---------------------------------------------------------
    * 6. Duplicate detection
-   *
-   * For now we check:
-   *
-   * branch + country code + phone
-   *
-   * Later we'll make this more sophisticated.
-   * ---------------------------------------------------------
    */
-
   const existingLead = await Lead.findOne({
     branch: branchId,
     phoneCountryCode: data.phoneCountryCode,
@@ -147,40 +264,51 @@ export const createLead = async (
   }
 
   /**
-   * ---------------------------------------------------------
-   * 7. Create Lead
-   * ---------------------------------------------------------
+   * 7. Automatic Self-Assignment Logic for Employees
    */
+  const now = new Date();
+  const isEmployee = user.role === ROLES.EMPLOYEE;
 
+  const creatorObjectId = new Types.ObjectId(user.id);
+  const assignedTo = isEmployee ? creatorObjectId : undefined;
+  const assignedBy = isEmployee ? creatorObjectId : undefined;
+  const assignedAt = isEmployee ? now : undefined;
+
+  /**
+   * 8. Create Lead
+   */
   const lead = await Lead.create({
     name: data.name,
-
     phoneCountryCode: data.phoneCountryCode,
-
     phone: normalizedPhone,
-
     email: data.email || undefined,
-
     city: data.city || undefined,
-
     industry: data.industry || undefined,
-
     message: data.message || undefined,
-
     remarks: data.remarks || undefined,
-
     source: data.source,
-
     sourceType: data.sourceType,
-
     branch: new Types.ObjectId(branchId),
-
-    createdBy: new Types.ObjectId(user.id),
-
+    createdBy: creatorObjectId,
+    assignedTo,
+    assignedBy,
+    assignedAt,
     status: LEAD_STATUS.NEW,
-
     isDeleted: false,
   });
+
+  /**
+   * 9. Log Assignment History (If Auto-Assigned)
+   */
+  if (isEmployee) {
+    await LeadAssignmentHistory.create({
+      lead: lead._id,
+      assignedTo: creatorObjectId,
+      assignedBy: creatorObjectId,
+      branch: lead.branch,
+      assignedAt: now,
+    });
+  }
 
   return lead;
 };
