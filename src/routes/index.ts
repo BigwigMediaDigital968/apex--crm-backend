@@ -16,6 +16,7 @@ import leaveBalanceRoutes from "./leave-balance.routes.js";
 import dialerRoutes from "./dialer.routes.js";
 import performanceRoutes from "./performance.routes.js";
 import revenueRoutes from "./revenue.routes.js"
+import contestRoutes from "./contest.routes.js"
 
 const router = Router();
 
@@ -44,5 +45,6 @@ router.use("/leaves", leaveRoutes);
 router.use("/leave-balances", leaveBalanceRoutes);
 router.use("/performance", performanceRoutes);
 router.use("/revenue", revenueRoutes);
+router.use("/contest", contestRoutes);
 
 export default router;
