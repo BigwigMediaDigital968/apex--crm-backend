@@ -15,7 +15,7 @@ import { TASK_ACTIVITY_TYPE } from "../constants/taskActivity.js";
 interface CreateTaskInput {
   title: string;
   description?: string;
-  lead?: string;
+  leads?: string[];
   assignedTo: string;
   priority?: TaskPriority;
   dueDate?: string;
@@ -32,7 +32,18 @@ interface UpdateTaskInput {
   completedAt?: string | null;
   assignedTo?: string;
   branch?: string;
-  lead?: string | null;
+  leads?: string[] | null;
+}
+
+interface GetTasksQueryParams {
+  branch?: string;
+  assignedTo?: string;
+  lead?: string; // Query tasks linked to a specific lead ID
+  status?: string;
+  priority?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export const createTask = async (
@@ -51,31 +62,23 @@ export const createTask = async (
     .select("_id role branches isActive")
     .lean();
 
-  if (!creator) {
-    throw new AppError("Creator account not found", 404, "CREATOR_NOT_FOUND");
-  }
-
-  if (!creator.isActive) {
-    throw new AppError("Creator account is inactive", 403, "CREATOR_INACTIVE");
+  if (!creator || !creator.isActive) {
+    throw new AppError(
+      "Creator account is inactive or not found",
+      403,
+      "CREATOR_UNAVAILABLE",
+    );
   }
 
   const employee = await User.findById(data.assignedTo)
     .select("_id name email role branches isActive")
     .lean();
 
-  if (!employee) {
+  if (!employee || !employee.isActive) {
     throw new AppError(
-      "Assigned employee not found",
-      404,
-      "EMPLOYEE_NOT_FOUND",
-    );
-  }
-
-  if (!employee.isActive) {
-    throw new AppError(
-      "Cannot assign task to an inactive employee",
+      "Assigned employee not found or inactive",
       400,
-      "EMPLOYEE_INACTIVE",
+      "EMPLOYEE_UNAVAILABLE",
     );
   }
 
@@ -88,16 +91,7 @@ export const createTask = async (
   }
 
   let branchId: string;
-
-  /*
-   * Head can work across all branches.
-   * For Admin / Manager, the branch must come
-   * from the employee's branch relationship.
-   */
-
-  const employeeBranches = (employee.branches || []).map((branch) =>
-    branch.toString(),
-  );
+  const employeeBranches = (employee.branches || []).map((b) => b.toString());
 
   if (employeeBranches.length === 0) {
     throw new AppError(
@@ -108,6 +102,8 @@ export const createTask = async (
   }
 
   if (creator.role === ROLES.HEAD) {
+    const primaryBranch = employeeBranches[0];
+
     if (employeeBranches.length > 1) {
       throw new AppError(
         "Employee must have a single working branch for task assignment",
@@ -116,9 +112,7 @@ export const createTask = async (
       );
     }
 
-    const employeeBranch = employeeBranches[0];
-
-    if (!employeeBranch) {
+    if (!primaryBranch) {
       throw new AppError(
         "Employee branch could not be determined",
         400,
@@ -126,14 +120,11 @@ export const createTask = async (
       );
     }
 
-    branchId = employeeBranch;
+    branchId = primaryBranch;
   } else {
-    const creatorBranches = (creator.branches || []).map((branch) =>
-      branch.toString(),
-    );
-
-    const matchingBranch = employeeBranches.find((branch) =>
-      creatorBranches.includes(branch),
+    const creatorBranches = (creator.branches || []).map((b) => b.toString());
+    const matchingBranch = employeeBranches.find((b) =>
+      creatorBranches.includes(b),
     );
 
     if (!matchingBranch) {
@@ -143,44 +134,58 @@ export const createTask = async (
         "CROSS_BRANCH_ASSIGNMENT",
       );
     }
-
     branchId = matchingBranch;
   }
 
-  /*
-   * Validate lead if task is linked to a lead.
-   */
+  // ✅ Validate leads array if provided
+  let leadObjectIds: mongoose.Types.ObjectId[] = [];
 
-  if (data.lead) {
-    if (!mongoose.Types.ObjectId.isValid(data.lead)) {
-      throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
+  if (data.leads && data.leads.length > 0) {
+    const invalidLeadIds = data.leads.filter(
+      (id) => !mongoose.Types.ObjectId.isValid(id),
+    );
+    if (invalidLeadIds.length > 0) {
+      throw new AppError(
+        "One or more Lead IDs are invalid",
+        400,
+        "INVALID_LEAD_IDS",
+      );
     }
 
-    const lead = await Lead.findOne({
-      _id: data.lead,
+    const matchedLeads = await Lead.find({
+      _id: { $in: data.leads },
       isDeleted: false,
     })
       .select("_id branch")
       .lean();
 
-    if (!lead) {
-      throw new AppError("Lead not found", 404, "LEAD_NOT_FOUND");
+    if (matchedLeads.length !== data.leads.length) {
+      throw new AppError(
+        "One or more leads were not found",
+        444,
+        "LEADS_NOT_FOUND",
+      );
     }
 
-    if (lead.branch.toString() !== branchId) {
+    const invalidBranchLead = matchedLeads.find(
+      (l) => l.branch.toString() !== branchId,
+    );
+    if (invalidBranchLead) {
       throw new AppError(
-        "Lead does not belong to the selected branch",
+        "All leads must belong to the task's assigned branch",
         403,
         "CROSS_BRANCH_LEAD",
       );
     }
+
+    leadObjectIds = matchedLeads.map((l) => l._id as mongoose.Types.ObjectId);
   }
 
   const task = await Task.create({
     title: data.title,
     description: data.description,
     branch: new mongoose.Types.ObjectId(branchId),
-    lead: data.lead ? new mongoose.Types.ObjectId(data.lead) : undefined,
+    leads: leadObjectIds,
     assignedTo: new mongoose.Types.ObjectId(data.assignedTo),
     assignedBy: new mongoose.Types.ObjectId(creatorId),
     priority: data.priority,
@@ -189,7 +194,6 @@ export const createTask = async (
     createdBy: new mongoose.Types.ObjectId(creatorId),
   });
 
-  // 1. Record task creation activity
   await createTaskActivity({
     task: task._id.toString(),
     activityType: TASK_ACTIVITY_TYPE.CREATED,
@@ -198,27 +202,118 @@ export const createTask = async (
     metadata: {
       title: task.title,
       assignedTo: task.assignedTo.toString(),
+      leadsCount: leadObjectIds.length,
       priority: task.priority,
       status: task.status,
-    },
-  });
-
-  // 2. Record initial task assignment activity
-  await createTaskActivity({
-    task: task._id.toString(),
-    activityType: TASK_ACTIVITY_TYPE.ASSIGNED,
-    performedBy: creatorId,
-    branch: task.branch.toString(),
-    newValue: task.assignedTo.toString(),
-    metadata: {
-      assignedTo: task.assignedTo.toString(),
     },
   });
 
   return task;
 };
 
-export const getTasks = async (user: AuthenticatedUser) => {
+export const updateTask = async (
+  taskId: string,
+  data: UpdateTaskInput,
+  user: AuthenticatedUser,
+) => {
+  if (!mongoose.Types.ObjectId.isValid(taskId)) {
+    throw new AppError("Invalid task ID", 400, "INVALID_TASK_ID");
+  }
+
+  const task = await Task.findOne({ _id: taskId, isDeleted: false });
+  if (!task) {
+    throw new AppError("Task not found", 404, "TASK_NOT_FOUND");
+  }
+
+  // Check access permissions
+  if (user.role === ROLES.EMPLOYEE && task.assignedTo.toString() !== user.id) {
+    throw new AppError(
+      "You do not have access to this task",
+      403,
+      "TASK_ACCESS_DENIED",
+    );
+  }
+
+  if (user.role !== ROLES.HEAD && user.role !== ROLES.EMPLOYEE) {
+    const userBranchIds = (user.branches || []).map((b) => b.toString());
+    if (!userBranchIds.includes(task.branch.toString())) {
+      throw new AppError(
+        "You do not have access to this task",
+        403,
+        "TASK_ACCESS_DENIED",
+      );
+    }
+  }
+
+  // ✅ Validate leads update
+  if (data.leads !== undefined) {
+    if (data.leads === null || data.leads.length === 0) {
+      task.leads = [];
+    } else {
+      const invalidLeadIds = data.leads.filter(
+        (id) => !mongoose.Types.ObjectId.isValid(id),
+      );
+      if (invalidLeadIds.length > 0) {
+        throw new AppError(
+          "One or more Lead IDs are invalid",
+          400,
+          "INVALID_LEAD_IDS",
+        );
+      }
+
+      const matchedLeads = await Lead.find({
+        _id: { $in: data.leads },
+        isDeleted: false,
+      })
+        .select("_id branch")
+        .lean();
+
+      if (matchedLeads.length !== data.leads.length) {
+        throw new AppError(
+          "One or more leads were not found",
+          404,
+          "LEADS_NOT_FOUND",
+        );
+      }
+
+      const targetBranch = data.branch || task.branch.toString();
+      const invalidBranchLead = matchedLeads.find(
+        (l) => l.branch.toString() !== targetBranch,
+      );
+      if (invalidBranchLead) {
+        throw new AppError(
+          "All leads must belong to the task's assigned branch",
+          403,
+          "CROSS_BRANCH_LEAD",
+        );
+      }
+
+      task.leads = matchedLeads.map((l) => l._id as mongoose.Types.ObjectId);
+    }
+  }
+
+  // Apply general field updates...
+  if (data.title !== undefined) task.title = data.title;
+  if (data.description !== undefined) task.description = data.description;
+  if (data.priority !== undefined)
+    task.priority = data.priority as typeof task.priority;
+  if (data.status !== undefined) {
+    task.status = data.status as typeof task.status;
+    task.completedAt =
+      data.status === TASK_STATUS.COMPLETED ? new Date() : undefined;
+  }
+  if (data.dueDate !== undefined)
+    task.dueDate = data.dueDate ? new Date(data.dueDate) : undefined;
+  if (data.remarks !== undefined) task.remarks = data.remarks;
+
+  await task.save();
+  return task;
+};
+
+export const getTasks = async (
+  user: AuthenticatedUser,
+  queryParams: GetTasksQueryParams = {},
+) => {
   if (!user || !user.role) {
     throw new AppError(
       "Authentication required",
@@ -229,6 +324,7 @@ export const getTasks = async (user: AuthenticatedUser) => {
 
   const filter: Record<string, unknown> = { isDeleted: false };
 
+  // 1. Role-based scoping (Base permissions)
   switch (user.role) {
     case ROLES.HEAD:
       break;
@@ -278,10 +374,85 @@ export const getTasks = async (user: AuthenticatedUser) => {
       );
   }
 
+  // 2. Query Parameters Filters
+
+  // Filter by lead ID (Checks if array contains the given lead ID)
+  if (queryParams.lead) {
+    if (!mongoose.Types.ObjectId.isValid(queryParams.lead)) {
+      throw new AppError("Invalid Lead ID in query", 400, "INVALID_LEAD_ID");
+    }
+    filter.leads = new mongoose.Types.ObjectId(queryParams.lead);
+  }
+
+  // Filter by branch (Restricted by user scope for non-HEAD)
+  if (queryParams.branch) {
+    if (!mongoose.Types.ObjectId.isValid(queryParams.branch)) {
+      throw new AppError(
+        "Invalid Branch ID in query",
+        400,
+        "INVALID_BRANCH_ID",
+      );
+    }
+    const requestedBranch = new mongoose.Types.ObjectId(queryParams.branch);
+
+    if (user.role === ROLES.ADMIN || user.role === ROLES.MANAGER) {
+      const allowedBranchIds = (
+        filter.branch as { $in: mongoose.Types.ObjectId[] }
+      ).$in;
+      const isAllowed = allowedBranchIds.some((b) => b.equals(requestedBranch));
+      if (!isAllowed) {
+        throw new AppError(
+          "Access denied to requested branch",
+          403,
+          "BRANCH_ACCESS_DENIED",
+        );
+      }
+    }
+    filter.branch = requestedBranch;
+  }
+
+  // Filter by assigned employee (Only HEAD/Admin/Manager can filter by other assignees)
+  if (queryParams.assignedTo && user.role !== ROLES.EMPLOYEE) {
+    if (!mongoose.Types.ObjectId.isValid(queryParams.assignedTo)) {
+      throw new AppError(
+        "Invalid Employee ID in query",
+        400,
+        "INVALID_EMPLOYEE_ID",
+      );
+    }
+    filter.assignedTo = new mongoose.Types.ObjectId(queryParams.assignedTo);
+  }
+
+  // Filter by status & priority
+  if (queryParams.status) {
+    filter.status = queryParams.status;
+  }
+
+  if (queryParams.priority) {
+    filter.priority = queryParams.priority;
+  }
+
+  // Search filter (title / description)
+  if (queryParams.search) {
+    filter.$or = [
+      { title: { $regex: queryParams.search, $options: "i" } },
+      { description: { $regex: queryParams.search, $options: "i" } },
+    ];
+  }
+
+  // Date range filter on dueDate
+  if (queryParams.startDate || queryParams.endDate) {
+    const dateFilter: Record<string, Date> = {};
+    if (queryParams.startDate)
+      dateFilter.$gte = new Date(queryParams.startDate);
+    if (queryParams.endDate) dateFilter.$lte = new Date(queryParams.endDate);
+    filter.dueDate = dateFilter;
+  }
+
   return Task.find(filter)
     .populate("assignedTo", "name email role")
     .populate("assignedBy", "name email role")
-    .populate("lead", "name phone email status")
+    .populate("leads", "name phone email status")
     .populate("branch", "name code")
     .sort({ createdAt: -1 });
 };
@@ -298,7 +469,7 @@ export const getTaskById = async (taskId: string, user: AuthenticatedUser) => {
     .populate("assignedTo", "name email role branches")
     .populate("assignedBy", "name email role")
     .populate("createdBy", "name email role")
-    .populate("lead", "name phone email status")
+    .populate("leads", "name phone email status")
     .populate("branch", "name code")
     .lean();
 
@@ -344,321 +515,6 @@ export const getTaskById = async (taskId: string, user: AuthenticatedUser) => {
       403,
       "TASK_ACCESS_DENIED",
     );
-  }
-
-  return task;
-};
-
-export const updateTask = async (
-  taskId: string,
-  data: UpdateTaskInput,
-  user: AuthenticatedUser,
-) => {
-  if (!mongoose.Types.ObjectId.isValid(taskId)) {
-    throw new AppError("Invalid task ID", 400, "INVALID_TASK_ID");
-  }
-
-  const task = await Task.findOne({
-    _id: taskId,
-    isDeleted: false,
-  });
-
-  if (!task) {
-    throw new AppError("Task not found", 404, "TASK_NOT_FOUND");
-  }
-
-  /*
-   * ------------------------------------------------
-   * 1. Capture initial values before mutations
-   * ------------------------------------------------
-   */
-  const previousStatus = task.status;
-  const previousAssignedTo = task.assignedTo
-    ? task.assignedTo.toString()
-    : undefined;
-  const previousPriority = task.priority;
-  const previousDueDate = task.dueDate ? new Date(task.dueDate) : undefined;
-  const previousRemarks = task.remarks;
-
-  /*
-   * ------------------------------------------------
-   * 2. Verify user has access to this task
-   * ------------------------------------------------
-   */
-
-  if (user.role === ROLES.EMPLOYEE) {
-    if (task.assignedTo.toString() !== user.id) {
-      throw new AppError(
-        "You do not have access to this task",
-        403,
-        "TASK_ACCESS_DENIED",
-      );
-    }
-  }
-
-  if (user.role !== ROLES.HEAD && user.role !== ROLES.EMPLOYEE) {
-    const userBranchIds = (user.branches || []).map((branchId) =>
-      branchId.toString(),
-    );
-
-    if (!userBranchIds.includes(task.branch.toString())) {
-      throw new AppError(
-        "You do not have access to this task",
-        403,
-        "TASK_ACCESS_DENIED",
-      );
-    }
-  }
-
-  /*
-   * ------------------------------------------------
-   * 3. Determine allowed fields
-   * ------------------------------------------------
-   */
-
-  const allowedFields = TASK_UPDATE_FIELDS[user.role];
-
-  /*
-   * ------------------------------------------------
-   * 4. Prevent unauthorized fields
-   * ------------------------------------------------
-   */
-
-  const incomingFields = Object.keys(data);
-
-  const unauthorizedFields = incomingFields.filter(
-    (field) => !(allowedFields as readonly string[]).includes(field),
-  );
-
-  if (unauthorizedFields.length > 0) {
-    throw new AppError(
-      `You are not allowed to update: ${unauthorizedFields.join(", ")}`,
-      403,
-      "TASK_FIELD_UPDATE_DENIED",
-    );
-  }
-
-  /*
-   * ------------------------------------------------
-   * 5. Validate branch change
-   * ------------------------------------------------
-   */
-
-  if (data.branch) {
-    if (!mongoose.Types.ObjectId.isValid(data.branch)) {
-      throw new AppError("Invalid branch ID", 400, "INVALID_BRANCH_ID");
-    }
-
-    const branchAllowed =
-      user.role === ROLES.HEAD ||
-      user.branches.map((id) => id.toString()).includes(data.branch);
-
-    if (!branchAllowed) {
-      throw new AppError(
-        "You cannot move a task to this branch",
-        403,
-        "BRANCH_ACCESS_DENIED",
-      );
-    }
-  }
-
-  /*
-   * ------------------------------------------------
-   * 6. Validate assigned employee
-   * ------------------------------------------------
-   */
-
-  if (data.assignedTo) {
-    if (!mongoose.Types.ObjectId.isValid(data.assignedTo)) {
-      throw new AppError("Invalid employee ID", 400, "INVALID_EMPLOYEE_ID");
-    }
-
-    const employee = await User.findOne({
-      _id: data.assignedTo,
-      isActive: true,
-    }).select("_id role branches");
-
-    if (!employee) {
-      throw new AppError(
-        "Assigned employee not found or inactive",
-        404,
-        "EMPLOYEE_NOT_FOUND",
-      );
-    }
-
-    const employeeBranchIds = employee.branches.map((branchId) =>
-      branchId.toString(),
-    );
-
-    /*
-     * HEAD can assign across branches.
-     */
-    if (user.role === ROLES.HEAD) {
-      // allowed
-    } else {
-      /*
-       * Admin / Manager must assign within
-       * a branch they control.
-       */
-      const hasCommonBranch = employeeBranchIds.some((branchId) =>
-        user.branches.map((id) => id.toString()).includes(branchId),
-      );
-
-      if (!hasCommonBranch) {
-        throw new AppError(
-          "Employee does not belong to your branch",
-          403,
-          "EMPLOYEE_BRANCH_ACCESS_DENIED",
-        );
-      }
-    }
-  }
-
-  /*
-   * ------------------------------------------------
-   * 7. Apply updates to the task model
-   * ------------------------------------------------
-   */
-
-  if (data.title !== undefined) {
-    task.title = data.title;
-  }
-
-  if (data.description !== undefined) {
-    task.description = data.description;
-  }
-
-  if (data.priority !== undefined) {
-    task.priority = data.priority as typeof task.priority;
-  }
-
-  if (data.status !== undefined) {
-    task.status = data.status as typeof task.status;
-
-    if (
-      data.status === TASK_STATUS.COMPLETED &&
-      previousStatus !== TASK_STATUS.COMPLETED
-    ) {
-      task.completedAt = new Date();
-    }
-
-    if (data.status !== TASK_STATUS.COMPLETED) {
-      task.completedAt = undefined;
-    }
-  }
-
-  if (data.dueDate !== undefined) {
-    task.dueDate = data.dueDate ? new Date(data.dueDate) : undefined;
-  }
-
-  if (data.remarks !== undefined) {
-    task.remarks = data.remarks;
-  }
-
-  if (data.completedAt !== undefined) {
-    task.completedAt = data.completedAt
-      ? new Date(data.completedAt)
-      : undefined;
-  }
-
-  if (data.assignedTo !== undefined) {
-    task.assignedTo = new mongoose.Types.ObjectId(data.assignedTo);
-  }
-
-  if (data.branch !== undefined) {
-    task.branch = new mongoose.Types.ObjectId(data.branch);
-  }
-
-  if (data.lead !== undefined) {
-    task.lead = data.lead ? new mongoose.Types.ObjectId(data.lead) : undefined;
-  }
-
-  await task.save();
-
-  /*
-   * ------------------------------------------------
-   * 8. Record Task Activity Logs
-   * ------------------------------------------------
-   */
-
-  // A. Status Change / Completion Activity
-  if (data.status !== undefined && previousStatus !== data.status) {
-    await createTaskActivity({
-      task: task._id.toString(),
-      activityType:
-        data.status === TASK_STATUS.COMPLETED
-          ? TASK_ACTIVITY_TYPE.COMPLETED
-          : TASK_ACTIVITY_TYPE.STATUS_CHANGED,
-      performedBy: user.id,
-      branch: task.branch.toString(),
-      previousValue: previousStatus,
-      newValue: data.status,
-      metadata: {
-        taskTitle: task.title,
-      },
-    });
-  }
-
-  // B. Task Reassignment Activity
-  const newAssignedTo = task.assignedTo.toString();
-
-  if (previousAssignedTo && previousAssignedTo !== newAssignedTo) {
-    await createTaskActivity({
-      task: task._id.toString(),
-      activityType: TASK_ACTIVITY_TYPE.REASSIGNED,
-      performedBy: user.id,
-      branch: task.branch.toString(),
-      previousValue: previousAssignedTo,
-      newValue: newAssignedTo,
-      metadata: {
-        reason: "Task reassigned",
-      },
-    });
-  }
-
-  // C. Priority Change Activity
-  if (data.priority !== undefined && previousPriority !== data.priority) {
-    await createTaskActivity({
-      task: task._id.toString(),
-      activityType: TASK_ACTIVITY_TYPE.PRIORITY_CHANGED,
-      performedBy: user.id,
-      branch: task.branch.toString(),
-      previousValue: previousPriority,
-      newValue: data.priority,
-    });
-  }
-
-  // D. Due Date Change Activity
-  if (data.dueDate !== undefined) {
-    const newDueDate = data.dueDate ? new Date(data.dueDate) : undefined;
-
-    const previousTime = previousDueDate ? previousDueDate.getTime() : null;
-    const newTime = newDueDate ? newDueDate.getTime() : null;
-
-    if (previousTime !== newTime) {
-      await createTaskActivity({
-        task: task._id.toString(),
-        activityType: TASK_ACTIVITY_TYPE.DUE_DATE_CHANGED,
-        performedBy: user.id,
-        branch: task.branch.toString(),
-        previousValue: previousDueDate
-          ? previousDueDate.toISOString()
-          : undefined,
-        newValue: newDueDate ? newDueDate.toISOString() : undefined,
-      });
-    }
-  }
-
-  // E. Remarks Added / Changed Activity
-  if (data.remarks !== undefined) {
-    await createTaskActivity({
-      task: task._id.toString(),
-      activityType: TASK_ACTIVITY_TYPE.REMARK_ADDED,
-      performedBy: user.id,
-      branch: task.branch.toString(),
-      previousValue: previousRemarks || undefined,
-      newValue: data.remarks,
-    });
   }
 
   return task;

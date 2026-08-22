@@ -36,7 +36,7 @@ export const createTaskController = async (
       metadata: {
         title: task.title,
         assignedTo: task.assignedTo.toString(),
-        lead: task.lead ? task.lead.toString() : undefined,
+        lead: task.leads ? task.leads.toString() : undefined,
       },
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
@@ -66,7 +66,7 @@ export const getTasksController = async (
       );
     }
 
-    const tasks = await getTasks(req.user);
+    const tasks = await getTasks(req.user, req.query);
 
     return res.status(200).json({
       success: true,

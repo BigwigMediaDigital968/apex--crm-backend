@@ -8,7 +8,7 @@ export const createTaskSchema = z.object({
 
   description: z.string().trim().max(5000).optional(),
 
-  lead: z.string().optional(),
+  leads: z.array(z.string()).optional(),
 
   assignedTo: z.string().min(1),
 
@@ -78,9 +78,5 @@ export const updateTaskSchema = z.object({
     .regex(/^[0-9a-fA-F]{24}$/)
     .optional(),
 
-  lead: z
-    .string()
-    .regex(/^[0-9a-fA-F]{24}$/)
-    .nullable()
-    .optional(),
+  leads: z.array(z.string()).nullable().optional(),
 });

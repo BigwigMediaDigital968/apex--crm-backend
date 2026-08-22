@@ -1,7 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-
 import { verifyAccessToken } from "../utils/jwt.js";
-
 import { User } from "../models/User.js";
 
 export const authenticate = async (
@@ -52,12 +50,15 @@ export const authenticate = async (
       });
     }
 
+    const userBranches = (user.branches || []).map((branch) => branch.toString());
+
     req.user = {
       id: user._id.toString(),
       name: user.name,
       email: user.email,
       role: user.role,
-      branches: (user.branches || []).map((branch) => branch.toString()),
+      branchId: userBranches, // ✅ Satisfies AuthenticatedUser.branchId
+      branches: userBranches,
     };
 
     next();

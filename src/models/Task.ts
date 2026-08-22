@@ -11,7 +11,7 @@ export interface ITask extends Document {
 
   branch: mongoose.Types.ObjectId;
 
-  lead?: mongoose.Types.ObjectId;
+  leads?: mongoose.Types.ObjectId[]; // ✅ Multi-lead array
 
   assignedTo: mongoose.Types.ObjectId;
 
@@ -58,11 +58,13 @@ const taskSchema = new Schema<ITask>(
       index: true,
     },
 
-    lead: {
-      type: Schema.Types.ObjectId,
-      ref: "Lead",
-      index: true,
-    },
+    leads: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Lead",
+        index: true,
+      },
+    ],
 
     assignedTo: {
       type: Schema.Types.ObjectId,
