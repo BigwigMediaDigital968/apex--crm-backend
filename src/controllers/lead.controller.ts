@@ -60,7 +60,7 @@ export const createLeadController = async (
 
       entityId: lead._id.toString(),
 
-      branch: lead.branch.toString(),
+      branch: lead.branch?.toString(),
 
       metadata: {
         name: lead.name,

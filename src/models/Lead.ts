@@ -37,7 +37,7 @@ export interface ILead extends Document {
 
   externalId?: string;
 
-  branch: mongoose.Types.ObjectId;
+  branch?: mongoose.Types.ObjectId;
 
   assignedTo?: mongoose.Types.ObjectId;
 

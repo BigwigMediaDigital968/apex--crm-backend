@@ -184,6 +184,11 @@ export const createLead = async (
    */
   let branchId: string | undefined;
 
+  // HEAD can leave a lead unassigned to any branch at creation time — it
+  // simply won't be visible to anyone below HEAD until it's later assigned
+  // to an employee, at which point assignLead backfills the branch from
+  // that employee's own account. ADMIN must still pick one explicitly,
+  // since (unlike HEAD) their own branch access is itself branch-scoped.
   if (user.role === ROLES.HEAD || user.role === ROLES.ADMIN) {
     branchId = data.branchId;
   }
@@ -200,43 +205,45 @@ export const createLead = async (
     branchId = user.branches[0];
   }
 
-  if (!branchId) {
+  if (!branchId && user.role !== ROLES.HEAD) {
     throw new AppError("Branch is required", 400, "BRANCH_REQUIRED");
   }
 
-  /**
-   * 2. Validate ObjectId
-   */
-  if (!Types.ObjectId.isValid(branchId)) {
-    throw new AppError("Invalid branch ID", 400, "INVALID_BRANCH_ID");
-  }
+  if (branchId) {
+    /**
+     * 2. Validate ObjectId
+     */
+    if (!Types.ObjectId.isValid(branchId)) {
+      throw new AppError("Invalid branch ID", 400, "INVALID_BRANCH_ID");
+    }
 
-  /**
-   * 3. Verify branch exists
-   */
-  const branch = await Branch.findOne({
-    _id: branchId,
-    isActive: true,
-  });
+    /**
+     * 3. Verify branch exists
+     */
+    const branch = await Branch.findOne({
+      _id: branchId,
+      isActive: true,
+    });
 
-  if (!branch) {
-    throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
-  }
+    if (!branch) {
+      throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
+    }
 
-  /**
-   * 4. Verify user has access to branch
-   */
-  if (user.role !== ROLES.HEAD) {
-    const hasBranchAccess = user.branches?.some(
-      (id) => id.toString() === branchId,
-    );
-
-    if (!hasBranchAccess) {
-      throw new AppError(
-        "You do not have access to this branch",
-        403,
-        "BRANCH_ACCESS_DENIED",
+    /**
+     * 4. Verify user has access to branch
+     */
+    if (user.role !== ROLES.HEAD) {
+      const hasBranchAccess = user.branches?.some(
+        (id) => id.toString() === branchId,
       );
+
+      if (!hasBranchAccess) {
+        throw new AppError(
+          "You do not have access to this branch",
+          403,
+          "BRANCH_ACCESS_DENIED",
+        );
+      }
     }
   }
 
@@ -246,10 +253,12 @@ export const createLead = async (
   const normalizedPhone = data.phone.replace(/\D/g, "");
 
   /**
-   * 6. Duplicate detection
+   * 6. Duplicate detection — scoped to the branch when there is one;
+   * scoped to the branchless pool otherwise, so a Head creating unassigned
+   * leads doesn't get blocked by (or collide with) branch-scoped duplicates.
    */
   const existingLead = await Lead.findOne({
-    branch: branchId,
+    branch: branchId ?? { $exists: false },
     phoneCountryCode: data.phoneCountryCode,
     phone: normalizedPhone,
     isDeleted: false,
@@ -288,7 +297,7 @@ export const createLead = async (
     remarks: data.remarks || undefined,
     source: data.source,
     sourceType: data.sourceType,
-    branch: new Types.ObjectId(branchId),
+    branch: branchId ? new Types.ObjectId(branchId) : undefined,
     createdBy: creatorObjectId,
     assignedTo,
     assignedBy,

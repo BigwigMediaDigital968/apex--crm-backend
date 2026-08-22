@@ -99,21 +99,43 @@ export const assignLead = async ({
 
   const isHead = actor.role === ROLES.HEAD;
 
-  // Branch checks for non-HEAD roles
-  if (!isHead) {
-    const employeeBelongsToBranch = targetUser.branches.some(
-      (branch) => branch.toString() === lead.branch.toString(),
-    );
-    if (!employeeBelongsToBranch) {
+  // Branch is optional at creation (HEAD can leave a lead unassigned to any
+  // branch), but assignment always locks it in — an assigned lead has to
+  // belong to a branch, since the employee it's assigned to only ever
+  // belongs to one. Backfill it from the employee's own branch before the
+  // branch-match checks below, which then trivially pass for a lead that
+  // was branchless a moment ago.
+  if (!lead.branch) {
+    if (targetUser.branches.length === 0) {
       throw new AppError(
-        "Employee does not belong to the lead's branch",
-        403,
-        "CROSS_BRANCH_ASSIGNMENT",
+        "This employee has no branch to assign the lead to",
+        400,
+        "EMPLOYEE_BRANCH_REQUIRED",
       );
     }
+    lead.branch = targetUser.branches[0];
+  }
 
+  // The employee must belong to the lead's branch regardless of who is
+  // assigning — otherwise the lead becomes permanently invisible to them,
+  // since the read-side access filter requires branch AND assignedTo to
+  // both match for the EMPLOYEE role.
+  const employeeBelongsToBranch = targetUser.branches.some(
+    (branch) => branch.toString() === lead.branch!.toString(),
+  );
+  if (!employeeBelongsToBranch) {
+    throw new AppError(
+      "Employee does not belong to the lead's branch",
+      403,
+      "CROSS_BRANCH_ASSIGNMENT",
+    );
+  }
+
+  // Only non-HEAD actors need their own branch access checked — HEAD has
+  // access to every branch.
+  if (!isHead) {
     const actorHasBranchAccess = actor.branches.some(
-      (branch) => branch.toString() === lead.branch.toString(),
+      (branch) => branch.toString() === lead.branch!.toString(),
     );
     if (!actorHasBranchAccess) {
       throw new AppError(
@@ -208,15 +230,38 @@ export const assignLeadsBulk = async ({
   const historyDocs = [];
 
   for (const lead of leads) {
-    if (!isHead) {
-      const employeeBelongs = targetUser.branches.some(
-        (b) => b.toString() === lead.branch.toString(),
+    // See assignLead above: a branchless lead (HEAD-created, never
+    // assigned) gets locked to the employee's own branch right here.
+    if (!lead.branch) {
+      if (targetUser.branches.length === 0) {
+        throw new AppError(
+          `Employee has no branch to assign lead ID: ${lead._id} to`,
+          400,
+          "EMPLOYEE_BRANCH_REQUIRED",
+        );
+      }
+      lead.branch = targetUser.branches[0];
+    }
+
+    // The employee must belong to each lead's branch regardless of who is
+    // assigning — see assignLead above for why.
+    const employeeBelongs = targetUser.branches.some(
+      (b) => b.toString() === lead.branch!.toString(),
+    );
+    if (!employeeBelongs) {
+      throw new AppError(
+        `Cross-branch assignment denied for lead ID: ${lead._id}`,
+        403,
+        "CROSS_BRANCH_ASSIGNMENT",
       );
+    }
+
+    if (!isHead) {
       const actorHasAccess = actor.branches.some(
-        (b) => b.toString() === lead.branch.toString(),
+        (b) => b.toString() === lead.branch!.toString(),
       );
 
-      if (!employeeBelongs || !actorHasAccess) {
+      if (!actorHasAccess) {
         throw new AppError(
           `Cross-branch assignment denied for lead ID: ${lead._id}`,
           403,
@@ -233,6 +278,9 @@ export const assignLeadsBulk = async ({
             assignedTo: targetUser._id, // Assign to the linked User ID
             assignedBy: new mongoose.Types.ObjectId(actorId),
             assignedAt: now,
+            // Persists the backfill above — bulkWrite doesn't pick up
+            // in-memory mutations on `lead` on its own.
+            branch: lead.branch,
           },
         },
       },

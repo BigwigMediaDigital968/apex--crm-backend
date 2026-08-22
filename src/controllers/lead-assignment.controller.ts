@@ -46,7 +46,7 @@ export const assignLeadController = async (
       action: "LEAD_ASSIGNED",
       entity: "Lead",
       entityId: lead._id.toString(),
-      branch: lead.branch.toString(),
+      branch: lead.branch?.toString(),
       metadata: {
         assignedTo: data.employeeId,
         assignedAt: lead.assignedAt,

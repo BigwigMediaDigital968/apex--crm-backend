@@ -168,7 +168,7 @@ export const createTask = async (
     }
 
     const invalidBranchLead = matchedLeads.find(
-      (l) => l.branch.toString() !== branchId,
+      (l) => l.branch?.toString() !== branchId,
     );
     if (invalidBranchLead) {
       throw new AppError(
@@ -278,7 +278,7 @@ export const updateTask = async (
 
       const targetBranch = data.branch || task.branch.toString();
       const invalidBranchLead = matchedLeads.find(
-        (l) => l.branch.toString() !== targetBranch,
+        (l) => l.branch?.toString() !== targetBranch,
       );
       if (invalidBranchLead) {
         throw new AppError(
