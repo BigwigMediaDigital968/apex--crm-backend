@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { generateStringeeToken } from "../utils/stringeeToken.js";
 import { CallLog } from "../models/CallLog.js";
 import { Lead } from "../models/Lead.js";
-import { createLeadActivity } from "../services/lead.service.js"; 
+import { createLeadActivity } from "../services/lead.service.js";
 
 export const getStringeeTokenController = async (
   req: Request,
@@ -22,28 +22,55 @@ export const getStringeeTokenController = async (
 };
 
 export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
-  const { from, to } = req.body;
+  // Stringee sends data via req.body or req.query
+  const body = req.body || {};
+  const query = req.query || {};
 
+  const rawFrom = body.from || query.from || "";
+  const rawTo = body.to || query.to || "";
+
+  // 1. Sanitize 'to' number: Remove +, spaces, and non-numeric characters
+  const cleanTo = String(rawTo).replace(/\D/g, "");
+
+  // 2. Fetch Hotline number & strip non-numeric characters
+  const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917949152692";
+  const cleanHotline = String(rawHotline).replace(/\D/g, "");
+
+  // 3. Build Stringee Call Control Object (SCCO)
   const scco = [
     {
       action: "connect",
       from: {
         type: "external",
-        number: process.env.STRINGEE_HOTLINE_NUMBER,
-        alias: from,
+        number: cleanHotline,
+        alias: cleanHotline,
       },
-      to: { type: "external", number: to, alias: to },
+      to: {
+        type: "external",
+        number: cleanTo,
+        alias: cleanTo,
+      },
       record: true,
     },
   ];
 
+  console.log("[Stringee SCCO Response Sent]:", JSON.stringify(scco));
+
+  // Must return pure JSON Array with HTTP 200
   return res.status(200).json(scco);
 };
 
 export const handleCallEventsWebhook = async (req: Request, res: Response) => {
   try {
-    const { call_id, call_status, duration, record_url, custom_data } = req.body;
-    const meta = custom_data ? JSON.parse(custom_data) : {};
+    const { call_id, call_status, duration, record_url, custom_data } =
+      req.body;
+    let meta: any = {};
+
+    try {
+      meta = custom_data ? JSON.parse(custom_data) : {};
+    } catch {
+      meta = {};
+    }
 
     // 1. Save or Update Call Log
     await CallLog.findOneAndUpdate(
@@ -58,20 +85,20 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
           ...(meta.branchId && { branch: meta.branchId }),
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
 
-    // 2. Create Lead Activity Log using the matching schema fields
+    // 2. Create Lead Activity Log
     if (call_status === "ended" && meta.leadId && meta.userId) {
       await createLeadActivity({
         leadId: meta.leadId,
         activityType: "call_logged",
         performedBy: meta.userId,
         remark: `Outbound call ended. Duration: ${duration || 0}s`,
-        metadata: { 
-          callId: call_id, 
+        metadata: {
+          callId: call_id,
           recordingUrl: record_url,
-          branchId: meta.branchId 
+          branchId: meta.branchId,
         },
       });
     }
@@ -89,7 +116,6 @@ export const getLeadCallHistoryController = async (
   try {
     const { leadId } = req.params;
 
-    // Check if lead exists & user has branch access
     const lead = await Lead.findById(leadId);
     if (!lead || lead.isDeleted) {
       return res.status(404).json({ message: "Lead not found" });
@@ -97,7 +123,6 @@ export const getLeadCallHistoryController = async (
 
     const query: any = { lead: leadId };
 
-    // Enforce branch boundaries if user is not HEAD
     if (req.user?.role !== "head") {
       query.branch = req.user?.branches;
     }
