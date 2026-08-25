@@ -55,15 +55,15 @@ export const listLeadQuerySchema = z.object({
 
   status: z
     .enum([
-      "NEW",
-      "ASSIGNED",
-      "CONTACTED",
-      "FOLLOW_UP",
-      "INTERESTED",
-      "NEGOTIATION",
-      "WON",
-      "LOST",
-      "JUNK",
+      "new",
+      "assigned",
+      "contacted",
+      "follow_up",
+      "intrested",
+      "Qualified",
+      "Converted",
+      "Lost",
+      "Closed",
     ])
     .optional(),
 
