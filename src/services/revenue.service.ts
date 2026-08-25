@@ -346,7 +346,7 @@ export const getRevenueReport = async (
   const records = await Revenue.find(matchQuery)
     .populate("employee", "name email")
     .populate("branch", "name code")
-    .populate("lead", "title status")
+    .populate("lead", "name status")
     .sort({ date: -1 })
     .lean();
 
