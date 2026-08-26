@@ -10,6 +10,12 @@ import {
   type Gender,
 } from "../constants/employee.js";
 
+export interface IProfileImage {
+  url: string;
+  publicId?: string;
+  uploadedAt?: Date;
+}
+
 export interface IEmployeeDocument {
   documentType: string;
   documentNumber?: string;
@@ -43,6 +49,8 @@ export interface IBankDetails {
 
 export interface IEmployeeProfile extends Document {
   user: Types.ObjectId;
+
+  profileImage?: IProfileImage;
 
   employeeCode: string;
 
@@ -261,6 +269,27 @@ const bankDetailsSchema = new Schema<IBankDetails>(
   },
 );
 
+const profileImageSchema = new Schema<IProfileImage>(
+  {
+    url: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    publicId: {
+      type: String,
+      trim: true,
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const employeeProfileSchema = new Schema<IEmployeeProfile>(
   {
     user: {
@@ -269,6 +298,11 @@ const employeeProfileSchema = new Schema<IEmployeeProfile>(
       required: true,
       unique: true,
       index: true,
+    },
+
+    profileImage: {
+      type: profileImageSchema, // <-- ADD THIS FIELD TO SCHEMA
+      default: null,
     },
 
     employeeCode: {

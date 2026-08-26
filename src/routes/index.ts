@@ -15,8 +15,9 @@ import leaveRoutes from "./leave.routes.js";
 import leaveBalanceRoutes from "./leave-balance.routes.js";
 import dialerRoutes from "./dialer.routes.js";
 import performanceRoutes from "./performance.routes.js";
-import revenueRoutes from "./revenue.routes.js"
-import contestRoutes from "./contest.routes.js"
+import revenueRoutes from "./revenue.routes.js";
+import contestRoutes from "./contest.routes.js";
+import uploadRoutes from "./upload.routes.js";
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.use("/leads", leadRoutes);
 router.use("/dialer", dialerRoutes);
 router.use("/tasks", taskRoutes);
 router.use("/employee", employeeRoutes);
+router.use("/uploads", uploadRoutes);
 router.use("/holidays", holidayRoutes);
 router.use("/attendance", attendanceRoutes);
 router.use("/leave-policies", leavePolicyRoutes);

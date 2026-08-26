@@ -6,6 +6,14 @@ import {
   GENDER,
 } from "../constants/employee.js";
 
+const profileImageValidation = z
+  .object({
+    url: z.string().url("Invalid image URL"),
+    publicId: z.string().optional(),
+    uploadedAt: z.coerce.date().optional(),
+  })
+  .optional();
+
 const salarySchema = z.object({
   basic: z.number().min(0).default(0),
   hra: z.number().min(0).default(0),
@@ -54,6 +62,8 @@ export const createEmployeeProfileSchema = z.object({
   userId: z.string().min(1),
 
   employeeCode: z.string().trim().min(2).max(30),
+
+  profileImage: profileImageValidation,
 
   branchId: z.string().min(1),
 

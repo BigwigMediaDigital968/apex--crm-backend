@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from "express";
 import {
   createRevenueEntry,
   getRevenueReport,
+  getTotalRevenue,
   updateRevenueStatus,
 } from "../services/revenue.service.js";
 import { AppError } from "../utils/AppError.js";
@@ -35,6 +36,20 @@ export const getRevenueReportHandler = async (
   }
 };
 
+export const getTotalRevenueHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    const summary = await getTotalRevenue(req.user, req.query);
+    return res.status(200).json({ success: true, data: summary });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateRevenueStatusHandler = async (
   req: Request,
   res: Response,
@@ -42,7 +57,7 @@ export const updateRevenueStatusHandler = async (
 ) => {
   try {
     if (!req.user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
-    
+
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     if (!id) {
       throw new AppError("Revenue ID parameter is required", 400, "INVALID_ID");

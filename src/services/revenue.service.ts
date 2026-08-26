@@ -99,7 +99,10 @@ export const createRevenueEntry = async (
   const targetUserId = await resolveUserId(rawTargetId);
 
   // Authorization check for target employee
-  if (requestor.role === ROLES.EMPLOYEE && targetUserId.toString() !== requestor.id) {
+  if (
+    requestor.role === ROLES.EMPLOYEE &&
+    targetUserId.toString() !== requestor.id
+  ) {
     throw new AppError(
       "Employees can only log revenue for themselves",
       403,
@@ -275,10 +278,7 @@ export const getRevenueReport = async (
     targetUserIds.push(managerId);
     scopeInfo.teamSize = targetUserIds.length;
   } else if (viewMode === "BRANCH") {
-    if (
-      requestor.role === ROLES.EMPLOYEE ||
-      requestor.role === ROLES.MANAGER
-    ) {
+    if (requestor.role === ROLES.EMPLOYEE || requestor.role === ROLES.MANAGER) {
       throw new AppError(
         "Only Admins and Head can access full branch revenue",
         403,
@@ -367,7 +367,11 @@ export const updateRevenueStatus = async (
   revenueId: string,
   rawData: unknown,
 ) => {
-  if (requestor.role !== ROLES.ADMIN && requestor.role !== ROLES.HEAD && requestor.role !== ROLES.MANAGER) {
+  if (
+    requestor.role !== ROLES.ADMIN &&
+    requestor.role !== ROLES.HEAD &&
+    requestor.role !== ROLES.MANAGER
+  ) {
     throw new AppError(
       "Only Admins and Head can verify or reject revenue",
       403,
@@ -403,4 +407,159 @@ export const updateRevenueStatus = async (
 
   await revenue.save();
   return revenue;
+};
+
+// --- Schema Definition ---
+export const totalRevenueQuerySchema = z.object({
+  branchId: z.string().optional(),
+  status: z
+    .enum([
+      REVENUE_STATUS.PENDING,
+      REVENUE_STATUS.VERIFIED,
+      REVENUE_STATUS.REJECTED,
+    ])
+    .optional(),
+  startDate: z.string().datetime({ offset: true }).optional(),
+  endDate: z.string().datetime({ offset: true }).optional(),
+});
+
+// --- Service Function ---
+export const getTotalRevenue = async (
+  requestor: AuthenticatedUser,
+  rawQueryParams: unknown,
+) => {
+  // 1. Block Employees
+  if (requestor.role === ROLES.EMPLOYEE) {
+    throw new AppError(
+      "Employees are not authorized to view total revenue summaries",
+      403,
+      "ACCESS_DENIED",
+    );
+  }
+
+  const result = totalRevenueQuerySchema.safeParse(rawQueryParams);
+  if (!result.success) {
+    const errs = result.error.issues
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join(", ");
+    throw new AppError(
+      `Invalid query parameters: ${errs}`,
+      400,
+      "INVALID_QUERY",
+    );
+  }
+
+  const { branchId, status, startDate, endDate } = result.data;
+  const matchQuery: Record<string, unknown> = {};
+
+  // Status Filter (defaulting to VERIFIED if omitted is recommended for accurate totals)
+  if (status) {
+    matchQuery.status = status;
+  } else {
+    matchQuery.status = REVENUE_STATUS.VERIFIED;
+  }
+
+  // Date Range Filter
+  if (startDate || endDate) {
+    matchQuery.date = {};
+    if (startDate)
+      (matchQuery.date as Record<string, Date>).$gte = new Date(startDate);
+    if (endDate)
+      (matchQuery.date as Record<string, Date>).$lte = new Date(endDate);
+  }
+
+  // Role-Based Scoping Logic
+  if (requestor.role === ROLES.HEAD) {
+    // HEAD: Access all branches or filter by branchId if provided
+    if (branchId) {
+      if (!Types.ObjectId.isValid(branchId)) {
+        throw new AppError(
+          "Invalid Branch ID format",
+          400,
+          "INVALID_BRANCH_ID",
+        );
+      }
+      matchQuery.branch = new Types.ObjectId(branchId);
+    }
+  } else if (requestor.role === ROLES.ADMIN) {
+    // ADMIN: Restricted to assigned branches
+    const allowedBranches = requestor.branches || [];
+
+    if (branchId) {
+      if (!Types.ObjectId.isValid(branchId)) {
+        throw new AppError(
+          "Invalid Branch ID format",
+          400,
+          "INVALID_BRANCH_ID",
+        );
+      }
+      if (!allowedBranches.includes(branchId)) {
+        throw new AppError(
+          "Access denied to the specified branch",
+          403,
+          "ACCESS_DENIED",
+        );
+      }
+      matchQuery.branch = new Types.ObjectId(branchId);
+    } else {
+      matchQuery.branch = {
+        $in: allowedBranches.map((b) => new Types.ObjectId(b)),
+      };
+    }
+  } else if (requestor.role === ROLES.MANAGER) {
+    // MANAGER: Direct subordinates + self
+    const teamProfiles = await EmployeeProfile.find({
+      reportingManager: new Types.ObjectId(requestor.id),
+    })
+      .select("user")
+      .lean();
+
+    const teamUserIds = teamProfiles.map((p) => p.user);
+    teamUserIds.push(new Types.ObjectId(requestor.id)); // Include Manager's revenue
+
+    matchQuery.employee = { $in: teamUserIds };
+
+    if (branchId) {
+      if (!Types.ObjectId.isValid(branchId)) {
+        throw new AppError(
+          "Invalid Branch ID format",
+          400,
+          "INVALID_BRANCH_ID",
+        );
+      }
+      matchQuery.branch = new Types.ObjectId(branchId);
+    }
+  }
+
+  // Aggregation Execution
+  const [aggregationResult] = await Revenue.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: null,
+        totalRevenue: { $sum: "$amount" },
+        count: { $sum: 1 },
+        avgRevenue: { $avg: "$amount" },
+      },
+    },
+  ]);
+
+  return {
+    scope: {
+      role: requestor.role,
+      appliedBranch:
+        branchId ||
+        (requestor.role === ROLES.ADMIN ? requestor.branches : "ALL"),
+    },
+    filter: {
+      status: matchQuery.status,
+      startDate: startDate || "ALL_TIME",
+      endDate: endDate || "ALL_TIME",
+    },
+    metrics: {
+      totalRevenue: aggregationResult?.totalRevenue || 0,
+      totalEntries: aggregationResult?.count || 0,
+      averageRevenuePerEntry: aggregationResult?.avgRevenue || 0,
+    },
+  };
 };

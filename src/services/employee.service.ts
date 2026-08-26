@@ -8,6 +8,7 @@ import {
 
 import {
   EmployeeProfile,
+  IProfileImage,
   type IEmployeeDocument,
   type ISalaryStructure,
 } from "../models/EmployeeProfile.js";
@@ -23,6 +24,7 @@ import { AppError } from "../utils/AppError.js";
 interface CreateEmployeeInput {
   userId: string;
   employeeCode: string;
+  profileImage?: IProfileImage;
   branchId: string;
   reportingManager?: string;
   designation?: string;
@@ -43,7 +45,7 @@ interface CreateEmployeeInput {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   emergencyContactRelation?: string;
-  documents?: IEmployeeDocument[]; // Fixed: unknown[] -> IEmployeeDocument[]
+  documents?: IEmployeeDocument[];
   salary: Record<string, number>;
   bankDetails?: Record<string, string>;
   notes?: string;
@@ -51,6 +53,7 @@ interface CreateEmployeeInput {
 
 export interface UpdateEmployeeInput {
   employeeCode?: string;
+  profileImage?: IProfileImage | null;
   branchId?: string;
   reportingManager?: string;
   designation?: string;
@@ -183,6 +186,8 @@ export const createEmployeeProfile = async (
     user: new Types.ObjectId(data.userId),
 
     employeeCode: data.employeeCode.toUpperCase(),
+
+    profileImage: data.profileImage,
 
     branch: new Types.ObjectId(data.branchId),
 
@@ -344,6 +349,9 @@ export const updateEmployeeProfile = async (
   }
 
   // 7. Update field mappings
+  if (data.profileImage !== undefined) {
+    employee.profileImage = data.profileImage ? data.profileImage : undefined;
+  }
   if (data.designation !== undefined) employee.designation = data.designation;
   if (data.department !== undefined) employee.department = data.department;
   if (data.employmentType !== undefined)
@@ -384,54 +392,6 @@ export const updateEmployeeProfile = async (
 
   return employee;
 };
-
-// export const getEmployeeProfileById = async (
-//   employeeId: string,
-//   context: AccessContext,
-// ) => {
-//   const employee = await EmployeeProfile.findById(employeeId)
-//     .populate("user", "name email role isActive")
-//     .populate("branch", "name code city state")
-//     .populate("reportingManager", "name email role")
-//     .populate({
-//       path: "leaveBalances",
-//       match: {
-//         year: new Date().getFullYear(),
-//       },
-//       populate: {
-//         path: "policy",
-//         select: "name code leaveType annualAllocation isPaid",
-//       },
-//     })
-//     .lean({ virtuals: true });
-
-//   if (!employee) {
-//     throw new AppError("Employee profile not found", 404, "EMPLOYEE_NOT_FOUND");
-//   }
-
-//   const branchId = employee.branch._id.toString();
-
-//   if (context.role !== ROLES.HEAD && !context.branches.includes(branchId)) {
-//     throw new AppError(
-//       "You do not have access to this employee",
-//       403,
-//       "EMPLOYEE_ACCESS_DENIED",
-//     );
-//   }
-
-//   if (
-//     context.role === ROLES.EMPLOYEE &&
-//     employee.user._id.toString() !== context.userId
-//   ) {
-//     throw new AppError(
-//       "You can only access your own employee profile",
-//       403,
-//       "EMPLOYEE_ACCESS_DENIED",
-//     );
-//   }
-
-//   return employee;
-// };
 
 export const getEmployeeProfileById = async (
   identifier: string,

@@ -90,3 +90,38 @@ export const uploadToCloudinary = (
     uploadStream.end(fileBuffer);
   });
 };
+
+// Add these helper functions at the end of src/config/cloudinary.ts
+
+export const deleteFromCloudinary = (
+  publicId: string,
+  resourceType: "image" | "video" | "raw" = "image",
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.destroy(
+      publicId,
+      { resource_type: resourceType, invalidate: true },
+      (error, result) => {
+        if (error) {
+          return reject(
+            new AppError(
+              `Cloudinary deletion failed: ${error.message}`,
+              500,
+              "CLOUDINARY_DELETE_ERROR",
+            ),
+          );
+        }
+        if (result?.result !== "ok" && result?.result !== "not found") {
+          return reject(
+            new AppError(
+              `Cloudinary deletion failed for ID: ${publicId}`,
+              500,
+              "CLOUDINARY_DELETE_ERROR",
+            ),
+          );
+        }
+        resolve();
+      },
+    );
+  });
+};
