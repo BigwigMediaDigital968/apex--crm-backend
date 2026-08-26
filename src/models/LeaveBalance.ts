@@ -32,7 +32,7 @@ const leaveBalanceSchema = new Schema<ILeaveBalance>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
+      // index: true,
     },
 
     leaveType: {
@@ -40,7 +40,7 @@ const leaveBalanceSchema = new Schema<ILeaveBalance>(
       required: true,
       trim: true,
       uppercase: true,
-      index: true,
+      // index: true,
     },
 
     policy: {
@@ -53,7 +53,7 @@ const leaveBalanceSchema = new Schema<ILeaveBalance>(
     year: {
       type: Number,
       required: true,
-      index: true,
+      // index: true,
     },
 
     allocated: {

@@ -45,7 +45,7 @@ const revenueSchema = new Schema<IRevenue>(
     lead: {
       type: Schema.Types.ObjectId,
       ref: "Lead",
-      index: true,
+      // index: true,
     },
     date: {
       type: Date,
