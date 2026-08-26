@@ -17,7 +17,7 @@ router.get(
   "/token",
   authenticate,
   authorize(PERMISSIONS.CALL_INITIATE),
-  getStringeeTokenController
+  getStringeeTokenController,
 );
 
 // Secure route to fetch call logs for a lead
@@ -25,11 +25,15 @@ router.get(
   "/lead/:leadId",
   authenticate,
   authorize(PERMISSIONS.CALL_LOG_VIEW),
-  getLeadCallHistoryController
+  getLeadCallHistoryController,
 );
 
 // Webhook routes (Public endpoints hit directly by Stringee servers)
-router.post("/answer-url", handleAnswerUrlWebhook);
+router
+  .route("/answer-url")
+  .get(handleAnswerUrlWebhook)
+  .post(handleAnswerUrlWebhook);
+  
 router.post("/events", handleCallEventsWebhook);
 
 export default router;

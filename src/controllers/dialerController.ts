@@ -22,19 +22,21 @@ export const getStringeeTokenController = async (
 };
 
 export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
-  const body = req.body || {};
-  const query = req.query || {};
+  // Read params from GET query or POST body
+  const rawFrom = req.query.from || req.body.from || "";
+  const rawTo = req.query.to || req.body.to || "";
+  const customData =
+    req.query.custom_data ||
+    req.body.custom_data ||
+    req.query.customData ||
+    req.body.customData ||
+    "";
 
-  // Stringee passes incoming call payload either in body or query
-  const rawFrom = body.from || query.from || "";
-  const rawTo = body.to || query.to || "";
-  const customData = body.custom_data || query.custom_data || "";
-
-  const cleanTo = String(rawTo).replace(/\D/g, "");
+  const cleanTo = String(rawTo).replace(/[^\d+]/g, "");
   const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
-  const cleanHotline = String(rawHotline).replace(/\D/g, "");
+  const cleanHotline = String(rawHotline).replace(/[^\d+]/g, "");
 
-  // Stringee Call Control Object (SCCO)
+  // Correct SCCO payload format expected by Stringee Voice SDK
   const scco = [
     {
       action: "connect",
@@ -48,11 +50,16 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
         number: cleanTo,
         alias: cleanTo,
       },
-      customData: customData,
+      customData:
+        typeof customData === "object"
+          ? JSON.stringify(customData)
+          : String(customData),
+      timeout: 45,
       record: true,
     },
   ];
 
+  res.setHeader("Content-Type", "application/json");
   return res.status(200).json(scco);
 };
 
