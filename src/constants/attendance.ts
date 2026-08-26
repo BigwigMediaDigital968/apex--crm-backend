@@ -10,8 +10,8 @@ export type AttendanceStatus =
   (typeof ATTENDANCE_STATUS)[keyof typeof ATTENDANCE_STATUS];
 
 export const ATTENDANCE_WORK_MODE = {
-  WFO: "wfo",
-  WFH: "wfh",
+  WFO: "WFO",
+  WFH: "WFH",
 } as const;
 
 export type AttendanceWorkMode =

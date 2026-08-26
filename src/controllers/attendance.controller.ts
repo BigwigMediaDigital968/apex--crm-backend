@@ -16,6 +16,40 @@ import { attendanceQuerySchema } from "../validators/attendance.validator.js";
 import { getAttendanceRecords } from "../services/attendance-query.service.js";
 import { getTeamAttendanceSummary } from "../services/attendance-report.service.js";
 
+// export const checkInController = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction,
+// ) => {
+//   try {
+//     if (!req.user) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Authentication required",
+//         code: "AUTHENTICATION_REQUIRED",
+//       });
+//     }
+
+//     const data = attendanceCheckInSchema.parse(req.body ?? {});
+
+//     const attendance = await checkInEmployee({
+//       employeeId: req.user.id,
+//       latitude: data.latitude,
+//       longitude: data.longitude,
+//     });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "Attendance checked in successfully",
+//       data: {
+//         attendance,
+//       },
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 export const checkInController = async (
   req: Request,
   res: Response,
@@ -30,10 +64,12 @@ export const checkInController = async (
       });
     }
 
+    // Parses and validates workMode + optional coordinates
     const data = attendanceCheckInSchema.parse(req.body ?? {});
 
     const attendance = await checkInEmployee({
       employeeId: req.user.id,
+      workMode: data.workMode,
       latitude: data.latitude,
       longitude: data.longitude,
     });

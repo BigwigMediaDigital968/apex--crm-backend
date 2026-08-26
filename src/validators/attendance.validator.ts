@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ATTENDANCE_WORK_MODE } from "../constants/attendance.js";
 
 const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid ID");
 
@@ -14,9 +15,41 @@ const coordinatesSchema = z.object({
     .max(180, "Longitude must be between -180 and 180"),
 });
 
-export const attendanceCheckInSchema = coordinatesSchema;
+export const attendanceCheckInSchema = z
+  .object({
+    workMode: z.nativeEnum(ATTENDANCE_WORK_MODE, {
+      message: "Work mode is required (WFO or WFH)",
+    }),
+    latitude: z
+      .number()
+      .min(-90, "Latitude must be between -90 and 90")
+      .max(90, "Latitude must be between -90 and 90")
+      .optional(),
+    longitude: z
+      .number()
+      .min(-180, "Longitude must be between -180 and 180")
+      .max(180, "Longitude must be between -180 and 180")
+      .optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.workMode === ATTENDANCE_WORK_MODE.WFO) {
+        return data.latitude !== undefined && data.longitude !== undefined;
+      }
+      return true;
+    },
+    {
+      message: "Latitude and longitude are required for Work From Office (WFO)",
+      path: ["latitude"],
+    },
+  );
 
-export const attendanceCheckOutSchema = coordinatesSchema;
+export const attendanceCheckOutSchema = z.object({
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+});
+
+// export const attendanceCheckOutSchema = coordinatesSchema;
 
 export type AttendanceCheckInInput = z.infer<typeof attendanceCheckInSchema>;
 
