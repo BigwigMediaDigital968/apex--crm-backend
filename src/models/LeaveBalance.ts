@@ -2,27 +2,16 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface ILeaveBalance extends Document {
   employee: mongoose.Types.ObjectId;
-
   leaveType: string;
-
   policy: mongoose.Types.ObjectId;
-
   year: number;
-
   allocated: number;
-
   used: number;
-
   pending: number;
-
   available: number;
-
   carriedForward: number;
-
   adjusted: number;
-
   createdAt: Date;
-
   updatedAt: Date;
 }
 
@@ -32,7 +21,6 @@ const leaveBalanceSchema = new Schema<ILeaveBalance>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      // index: true,
     },
 
     leaveType: {
@@ -40,7 +28,6 @@ const leaveBalanceSchema = new Schema<ILeaveBalance>(
       required: true,
       trim: true,
       uppercase: true,
-      // index: true,
     },
 
     policy: {
@@ -53,7 +40,6 @@ const leaveBalanceSchema = new Schema<ILeaveBalance>(
     year: {
       type: Number,
       required: true,
-      // index: true,
     },
 
     allocated: {
@@ -101,17 +87,7 @@ const leaveBalanceSchema = new Schema<ILeaveBalance>(
   },
 );
 
-leaveBalanceSchema.index(
-  {
-    employee: 1,
-    leaveType: 1,
-    year: 1,
-  },
-  {
-    unique: true,
-  },
-);
-
+// Single compound index definition
 leaveBalanceSchema.index(
   {
     employee: 1,

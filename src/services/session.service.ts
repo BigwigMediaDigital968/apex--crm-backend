@@ -67,43 +67,32 @@ export const getUserSessions = async (userId: string) => {
     .lean();
 };
 
-export const revokeUserSession =
-  async (
-    userId: string,
-    sessionId: string,
-  ) => {
-    const session =
-      await Session.findOneAndUpdate(
-        {
-          _id: sessionId,
-          user: userId,
-          revokedAt: null,
-        },
-        {
-          revokedAt: new Date(),
-        },
-        {
-          new: true,
-        },
-      );
+export const revokeUserSession = async (userId: string, sessionId: string) => {
+  const session = await Session.findOneAndUpdate(
+    {
+      _id: sessionId,
+      user: userId,
+      revokedAt: null,
+    },
+    {
+      revokedAt: new Date(),
+    },
+    { returnDocument: "after" },
+  );
 
-    return session;
-  };
+  return session;
+};
 
-  export const revokeAllUserSessions =
-  async (
-    userId: string,
-  ) => {
-    const result =
-      await Session.updateMany(
-        {
-          user: userId,
-          revokedAt: null,
-        },
-        {
-          revokedAt: new Date(),
-        },
-      );
+export const revokeAllUserSessions = async (userId: string) => {
+  const result = await Session.updateMany(
+    {
+      user: userId,
+      revokedAt: null,
+    },
+    {
+      revokedAt: new Date(),
+    },
+  );
 
-    return result;
-  };
+  return result;
+};

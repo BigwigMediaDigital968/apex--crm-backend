@@ -97,7 +97,7 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
           ...(meta.branchId && { branch: meta.branchId }),
         },
       },
-      { upsert: true, new: true },
+      { upsert: true, new: true }
     );
 
     // 2. Create Lead Activity Log
