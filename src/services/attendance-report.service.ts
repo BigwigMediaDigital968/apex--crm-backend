@@ -59,11 +59,11 @@ export const getEmployeeAttendanceSummary = async ({
       summary.leaveDays++;
     }
 
-    if (record.workMode === "wfo") {
+    if (record.workMode === "WFO") {
       summary.wfoDays++;
     }
 
-    if (record.workMode === "wfh") {
+    if (record.workMode === "WFH") {
       summary.wfhDays++;
     }
 
