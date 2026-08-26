@@ -530,3 +530,25 @@ export const listEmployees = async (
     },
   };
 };
+
+export const getEmployeeCountByBranch = async (
+  branchId: string,
+  context: AccessContext,
+): Promise<{ branchId: string; totalEmployees: number }> => {
+  if (!Types.ObjectId.isValid(branchId)) {
+    throw new AppError("Invalid branch ID format", 400, "INVALID_BRANCH_ID");
+  }
+
+  // Ensure user has access to this branch
+  assertBranchAccess(branchId, context);
+
+  const totalEmployees = await EmployeeProfile.countDocuments({
+    branch: new Types.ObjectId(branchId),
+    employmentStatus: { $ne: "terminated" }, // Uses correct model field name
+  });
+
+  return {
+    branchId,
+    totalEmployees,
+  };
+};

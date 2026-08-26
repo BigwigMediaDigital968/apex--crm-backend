@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import {
   createEmployeeProfile,
+  getEmployeeCountByBranch,
   getEmployeeProfileById,
   listEmployees,
   updateEmployeeProfile,
@@ -146,44 +147,6 @@ export const updateEmployeeController = async (
   }
 };
 
-// export const getEmployeeController = async (
-//   req: Request,
-//   res: Response,
-//   next: NextFunction,
-// ) => {
-//   try {
-//     if (!req.user) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "Authentication required",
-//       });
-//     }
-
-//     const employeeId = req.params.id;
-
-//     if (typeof employeeId !== "string") {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid employee ID",
-//         code: "INVALID_EMPLOYEE_ID",
-//       });
-//     }
-
-//     const employee = await getEmployeeProfileById(employeeId, {
-//       userId: req.user.id,
-//       role: req.user.role,
-//       branches: req.user.branches,
-//     });
-
-//     return res.status(200).json({
-//       success: true,
-//       data: employee,
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
 export const getEmployeeController = async (
   req: Request,
   res: Response,
@@ -250,6 +213,45 @@ export const listEmployeesController = async (
       success: true,
       data: result.items,
       pagination: result.pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getBranchEmployeeCountController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        code: "AUTHENTICATION_REQUIRED",
+      });
+    }
+
+    const { branchId } = req.params;
+
+    if (typeof branchId !== "string" || !Types.ObjectId.isValid(branchId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid branch ID provided",
+        code: "INVALID_BRANCH_ID",
+      });
+    }
+
+    const result = await getEmployeeCountByBranch(branchId, {
+      userId: req.user.id,
+      role: req.user.role,
+      branches: req.user.branches,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
     });
   } catch (error) {
     next(error);

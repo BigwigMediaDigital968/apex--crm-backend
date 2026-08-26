@@ -11,6 +11,7 @@ import {
   getEmployeeController,
   listEmployeesController,
   updateEmployeeController,
+  getBranchEmployeeCountController,
 } from "../controllers/employee.controller.js";
 
 const router = Router();
@@ -20,6 +21,13 @@ router.post(
   authenticate,
   authorize(PERMISSIONS.EMPLOYEE_CREATE),
   createEmployeeController,
+);
+
+router.get(
+  "/branch/:branchId/count",
+  authenticate,
+  authorize(PERMISSIONS.EMPLOYEE_VIEW),
+  getBranchEmployeeCountController,
 );
 
 router.patch(
