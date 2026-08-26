@@ -72,36 +72,110 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
   }
 };
 
+// export const handleCallEventsWebhook = async (req: Request, res: Response) => {
+//   try {
+//     const { call_id, call_status, duration, record_url, custom_data } =
+//       req.body;
+//     let meta: any = {};
+
+//     try {
+//       meta = custom_data ? JSON.parse(custom_data) : {};
+//     } catch {
+//       meta = {};
+//     }
+
+//     // 1. Save or Update Call Log
+//     await CallLog.findOneAndUpdate(
+//       { callId: call_id },
+//       {
+//         $set: {
+//           callStatus: call_status,
+//           duration: duration || 0,
+//           recordingUrl: record_url,
+//           ...(meta.leadId && { lead: meta.leadId }),
+//           ...(meta.userId && { caller: meta.userId }),
+//           ...(meta.branchId && { branch: meta.branchId }),
+//         },
+//       },
+//       { upsert: true, new: true }
+//     );
+
+//     // 2. Create Lead Activity Log
+//     if (call_status === "ended" && meta.leadId && meta.userId) {
+//       await createLeadActivity({
+//         leadId: meta.leadId,
+//         activityType: "call_logged",
+//         performedBy: meta.userId,
+//         remark: `Outbound call ended. Duration: ${duration || 0}s`,
+//         metadata: {
+//           callId: call_id,
+//           recordingUrl: record_url,
+//           branchId: meta.branchId,
+//         },
+//       });
+//     }
+
+//     return res.status(200).json({ status: "success" });
+//   } catch (error: any) {
+//     return res.status(500).json({ message: error.message });
+//   }
+// };
+
 export const handleCallEventsWebhook = async (req: Request, res: Response) => {
   try {
-    const { call_id, call_status, duration, record_url, custom_data } =
-      req.body;
-    let meta: any = {};
+    const {
+      call_id,
+      call_status,
+      duration,
+      record_url,
+      custom_data,
+      from_number,
+      to_number,
+      from,
+      to,
+    } = req.body;
 
-    try {
-      meta = custom_data ? JSON.parse(custom_data) : {};
-    } catch {
-      meta = {};
+    let meta: any = {};
+    if (custom_data) {
+      try {
+        meta = typeof custom_data === "string" ? JSON.parse(custom_data) : custom_data;
+      } catch {
+        meta = {};
+      }
     }
 
+    const callerFrom = from_number || from || meta.fromNumber || "Unknown";
+    const callerTo = to_number || to || meta.toNumber || "Unknown";
+
+    // Normalize call status to fit Mongoose Schema enum
+    let normalizedStatus: "started" | "answered" | "ended" | "missed" | "rejected" = "started";
+    if (call_status === "ended") normalizedStatus = "ended";
+    else if (call_status === "answered") normalizedStatus = "answered";
+    else if (call_status === "busy" || call_status === "rejected") normalizedStatus = "rejected";
+    else if (call_status === "no_answer") normalizedStatus = "missed";
+
     // 1. Save or Update Call Log
-    await CallLog.findOneAndUpdate(
-      { callId: call_id },
-      {
-        $set: {
-          callStatus: call_status,
-          duration: duration || 0,
-          recordingUrl: record_url,
-          ...(meta.leadId && { lead: meta.leadId }),
-          ...(meta.userId && { caller: meta.userId }),
-          ...(meta.branchId && { branch: meta.branchId }),
+    if (call_id) {
+      await CallLog.findOneAndUpdate(
+        { callId: call_id },
+        {
+          $set: {
+            callStatus: normalizedStatus,
+            duration: duration || 0,
+            fromNumber: callerFrom,
+            toNumber: callerTo,
+            ...(record_url && { recordingUrl: record_url }),
+            ...(meta.leadId && { lead: meta.leadId }),
+            ...(meta.userId && { caller: meta.userId }),
+            ...(meta.branchId && { branch: meta.branchId }),
+          },
         },
-      },
-      { upsert: true, new: true }
-    );
+        { upsert: true, new: true }
+      );
+    }
 
     // 2. Create Lead Activity Log
-    if (call_status === "ended" && meta.leadId && meta.userId) {
+    if (normalizedStatus === "ended" && meta.leadId && meta.userId) {
       await createLeadActivity({
         leadId: meta.leadId,
         activityType: "call_logged",
@@ -117,6 +191,7 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
 
     return res.status(200).json({ status: "success" });
   } catch (error: any) {
+    console.error("[Call Event Error]:", error);
     return res.status(500).json({ message: error.message });
   }
 };
