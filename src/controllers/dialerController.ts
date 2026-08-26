@@ -22,45 +22,54 @@ export const getStringeeTokenController = async (
 };
 
 export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
-  // Read params from GET query or POST body
-  const rawFrom = req.query.from || req.body.from || "";
-  const rawTo = req.query.to || req.body.to || "";
-  const customData =
-    req.query.custom_data ||
-    req.body.custom_data ||
-    req.query.customData ||
-    req.body.customData ||
-    "";
+  try {
+    // Safely fallback to empty objects if req.body or req.query are undefined
+    const body = req.body || {};
+    const query = req.query || {};
 
-  const cleanTo = String(rawTo).replace(/[^\d+]/g, "");
-  const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
-  const cleanHotline = String(rawHotline).replace(/[^\d+]/g, "");
+    // Stringee passes incoming call payload in query (GET) or body (POST)
+    const rawFrom = query.from || body.from || "";
+    const rawTo = query.to || body.to || "";
+    const customData =
+      query.custom_data ||
+      body.custom_data ||
+      query.customData ||
+      body.customData ||
+      "";
 
-  // Correct SCCO payload format expected by Stringee Voice SDK
-  const scco = [
-    {
-      action: "connect",
-      from: {
-        type: "external",
-        number: cleanHotline,
-        alias: cleanHotline,
+    const cleanTo = String(rawTo).replace(/[^\d+]/g, "");
+    const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
+    const cleanHotline = String(rawHotline).replace(/[^\d+]/g, "");
+
+    // SCCO payload for Stringee Programmable Voice
+    const scco = [
+      {
+        action: "connect",
+        from: {
+          type: "external",
+          number: cleanHotline,
+          alias: cleanHotline,
+        },
+        to: {
+          type: "external",
+          number: cleanTo,
+          alias: cleanTo,
+        },
+        customData:
+          typeof customData === "object"
+            ? JSON.stringify(customData)
+            : String(customData),
+        timeout: 45,
+        record: true,
       },
-      to: {
-        type: "external",
-        number: cleanTo,
-        alias: cleanTo,
-      },
-      customData:
-        typeof customData === "object"
-          ? JSON.stringify(customData)
-          : String(customData),
-      timeout: 45,
-      record: true,
-    },
-  ];
+    ];
 
-  res.setHeader("Content-Type", "application/json");
-  return res.status(200).json(scco);
+    res.setHeader("Content-Type", "application/json");
+    return res.status(200).json(scco);
+  } catch (error: any) {
+    console.error("[Stringee Webhook Error]:", error);
+    return res.status(500).json({ error: error.message });
+  }
 };
 
 export const handleCallEventsWebhook = async (req: Request, res: Response) => {
