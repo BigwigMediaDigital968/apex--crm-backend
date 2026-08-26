@@ -22,21 +22,19 @@ export const getStringeeTokenController = async (
 };
 
 export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
-  // Stringee sends data via req.body or req.query
   const body = req.body || {};
   const query = req.query || {};
 
+  // Stringee passes incoming call payload either in body or query
   const rawFrom = body.from || query.from || "";
   const rawTo = body.to || query.to || "";
+  const customData = body.custom_data || query.custom_data || "";
 
-  // 1. Sanitize 'to' number: Remove +, spaces, and non-numeric characters
   const cleanTo = String(rawTo).replace(/\D/g, "");
-
-  // 2. Fetch Hotline number & strip non-numeric characters
-  const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917949152692";
+  const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
   const cleanHotline = String(rawHotline).replace(/\D/g, "");
 
-  // 3. Build Stringee Call Control Object (SCCO)
+  // Stringee Call Control Object (SCCO)
   const scco = [
     {
       action: "connect",
@@ -50,13 +48,11 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
         number: cleanTo,
         alias: cleanTo,
       },
+      customData: customData,
       record: true,
     },
   ];
 
-  console.log("[Stringee SCCO Response Sent]:", JSON.stringify(scco));
-
-  // Must return pure JSON Array with HTTP 200
   return res.status(200).json(scco);
 };
 
