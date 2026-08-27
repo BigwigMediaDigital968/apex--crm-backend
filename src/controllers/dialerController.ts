@@ -197,23 +197,80 @@ export const getStringeeTokenController = async (
   }
 };
 
+// export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
+//   try {
+//     const body = req.body || {};
+//     const query = req.query || {};
+
+//     const rawTo = query.to || body.to || "";
+//     const customData =
+//       query.custom_data ||
+//       body.custom_data ||
+//       query.customData ||
+//       body.customData ||
+//       "";
+
+//     const cleanTo = String(rawTo).replace(/[^\d+]/g, "");
+//     const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
+//     const cleanHotline = String(rawHotline).replace(/[^\d+]/g, "");
+
+//     const scco = [
+//       {
+//         action: "connect",
+//         from: {
+//           type: "external",
+//           number: cleanHotline,
+//           alias: cleanHotline,
+//         },
+//         to: {
+//           type: "external",
+//           number: cleanTo,
+//           alias: cleanTo,
+//         },
+//         customData:
+//           typeof customData === "object"
+//             ? JSON.stringify(customData)
+//             : String(customData),
+//         timeout: 45,
+//         record: true,
+//       },
+//     ];
+
+//     res.setHeader("Content-Type", "application/json");
+//     return res.status(200).json(scco);
+//   } catch (error: any) {
+//     console.error("[Stringee Webhook Error]:", error);
+//     return res.status(500).json({ error: error.message });
+//   }
+// };
+
 export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
     const query = req.query || {};
 
     const rawTo = query.to || body.to || "";
-    const customData =
+
+    // Stringee forwards client customData as custom_data or customData in query/body
+    const rawCustomData =
       query.custom_data ||
       body.custom_data ||
       query.customData ||
       body.customData ||
       "";
 
+    let customDataString = "";
+    if (typeof rawCustomData === "object") {
+      customDataString = JSON.stringify(rawCustomData);
+    } else {
+      customDataString = String(rawCustomData);
+    }
+
     const cleanTo = String(rawTo).replace(/[^\d+]/g, "");
     const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
     const cleanHotline = String(rawHotline).replace(/[^\d+]/g, "");
 
+    // SCCO: You MUST include customData inside the connect action
     const scco = [
       {
         action: "connect",
@@ -227,10 +284,7 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
           number: cleanTo,
           alias: cleanTo,
         },
-        customData:
-          typeof customData === "object"
-            ? JSON.stringify(customData)
-            : String(customData),
+        customData: customDataString, // <--- THIS FORWARDS METADATA TO EVENT WEBHOOKS
         timeout: 45,
         record: true,
       },
