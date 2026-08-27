@@ -8,6 +8,8 @@ import {
   handleAnswerUrlWebhook,
   handleCallEventsWebhook,
   getLeadCallHistoryController,
+  getCallLogs,
+  getCallLogById,
 } from "../controllers/dialerController.js";
 
 const router = Router();
@@ -28,12 +30,16 @@ router.get(
   getLeadCallHistoryController,
 );
 
+// 2. Application REST Endpoints (Protected by App Auth)
+router.get("/logs", authenticate, authorize(PERMISSIONS.CALL_LOG_VIEW), getCallLogs);         // Supports ?limit=10 (for Dialer UI) & ?page=1 (for History UI)
+router.get("/logs/:id", authenticate, authorize(PERMISSIONS.CALL_LOG_VIEW), getCallLogById);   // Fetch single log details / audio stream link
+
 // Webhook routes (Public endpoints hit directly by Stringee servers)
 router
   .route("/answer-url")
   .get(handleAnswerUrlWebhook)
   .post(handleAnswerUrlWebhook);
-  
+
 router.post("/events", handleCallEventsWebhook);
 
 export default router;

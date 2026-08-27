@@ -519,3 +519,85 @@ export const getLeadCallHistoryController = async (
     return res.status(500).json({ message: error.message });
   }
 };
+
+/**
+ * GET /api/v1/dialer/logs
+ * Serves both:
+ * 1. Dialer UI Recent Widget (?limit=10)
+ * 2. Dedicated Call History Page (?page=1&limit=25&status=ended&search=...)
+ */
+export const getCallLogs = async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const page = parseInt(req.query.page as string) || 1;
+    const skip = (page - 1) * limit;
+
+    const { status, leadId, userId, branchId, search } = req.query;
+
+    // Dynamic Filter Construction
+    const filter: any = {};
+
+    if (status) filter.callStatus = status;
+    if (leadId) filter.lead = leadId;
+    if (userId) filter.caller = userId;
+    if (branchId) filter.branch = branchId;
+
+    // Search by Phone Number
+    if (search) {
+      filter.$or = [
+        { toNumber: new RegExp(String(search), "i") },
+        { fromNumber: new RegExp(String(search), "i") },
+      ];
+    }
+
+    const [logs, total] = await Promise.all([
+      CallLog.find(filter)
+        .populate("lead", "name phone email company avatar")
+        .populate("caller", "name email avatar")
+        .populate("branch", "name")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      CallLog.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: logs,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error: any) {
+    console.error("[Get Call Logs Error]:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * GET /api/v1/dialer/logs/:id
+ * Details view for a specific call session
+ */
+export const getCallLogById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const log = await CallLog.findById(id)
+      .populate("lead")
+      .populate("caller", "name email")
+      .populate("branch", "name")
+      .lean();
+
+    if (!log) {
+      return res.status(404).json({ message: "Call log record not found" });
+    }
+
+    return res.status(200).json({ success: true, data: log });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message });
+  }
+};
