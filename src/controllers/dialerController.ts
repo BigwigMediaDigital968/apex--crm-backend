@@ -396,6 +396,8 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ status: "ignored_no_call_id" });
     }
 
+    console.log("body", req.body);
+
     // 1. Safe parsing for custom_data
     const rawCustomData = req.body.custom_data || req.body.clientCustomData || req.body.customData;
 
