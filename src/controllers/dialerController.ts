@@ -397,10 +397,12 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
     }
 
     // 1. Safe parsing for custom_data
+    const rawCustomData = req.body.custom_data || req.body.clientCustomData || req.body.customData;
+
     let meta: any = {};
-    if (custom_data) {
+    if (rawCustomData) {
       try {
-        meta = typeof custom_data === "string" ? JSON.parse(custom_data) : custom_data;
+        meta = typeof rawCustomData === "string" ? JSON.parse(rawCustomData) : rawCustomData;
       } catch {
         meta = {};
       }
