@@ -180,6 +180,7 @@ import { generateStringeeToken } from "../utils/stringeeToken.js";
 import { CallLog } from "../models/CallLog.js";
 import { Lead } from "../models/Lead.js";
 import { createLeadActivity } from "../services/lead.service.js";
+import { User } from "../models/User.js";
 
 export const getStringeeTokenController = async (
   req: Request,
@@ -385,9 +386,8 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       event_type,
       duration,
       record_url,
-      custom_data,
-      from_number,
-      to_number,
+      request_from_user_id,
+      actor,
       from,
       to,
     } = req.body;
@@ -396,34 +396,44 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ status: "ignored_no_call_id" });
     }
 
-    console.log("body", req.body);
+    // 1. Extract Phone Numbers safely
+    const callerFrom = (typeof from === "object" ? from?.number : from) || "Unknown";
+    const callerTo = (typeof to === "object" ? to?.number : to) || "Unknown";
 
-    // 1. Safe parsing for custom_data
-    const rawCustomData = req.body.custom_data || req.body.clientCustomData || req.body.customData;
+    // 2. Resolve User & Branch using request_from_user_id
+    const rawUserId = request_from_user_id || actor;
+    let userId: string | null = null;
+    let branchId: string | null = null;
 
-    let meta: any = {};
-    if (rawCustomData) {
-      try {
-        meta = typeof rawCustomData === "string" ? JSON.parse(rawCustomData) : rawCustomData;
-      } catch {
-        meta = {};
+    if (rawUserId) {
+      const user = await User.findById(rawUserId).select("_id branches").lean();
+      if (user) {
+        userId = user._id.toString();
+        if (user.branches?.length) {
+          branchId = Array.isArray(user.branches)
+            ? user?.branches[0]?.toString()
+            : (user.branches as any).toString();
+        }
       }
     }
 
-    // 2. Safely extract string numbers from Stringee primitive OR object fields
-    const callerFrom =
-      (typeof from === "object" ? from?.number || from?.alias : from) ||
-      from_number ||
-      meta.fromNumber ||
-      "Unknown";
+    // 3. Resolve Lead by matching destination phone number
+    let leadId: string | null = null;
+    if (callerTo && callerTo !== "Unknown") {
+      const cleanPhone = callerTo.slice(-10); // Extract last 10 digits
+      const matchedLead = await Lead.findOne({
+        phone: new RegExp(cleanPhone + "$"),
+        isDeleted: { $ne: true },
+      })
+        .select("_id")
+        .lean();
 
-    const callerTo =
-      (typeof to === "object" ? to?.number || to?.alias : to) ||
-      to_number ||
-      meta.toNumber ||
-      "Unknown";
+      if (matchedLead) {
+        leadId = matchedLead._id.toString();
+      }
+    }
 
-    // 3. Status Normalization
+    // 4. Normalize Status
     const rawStatus = String(call_status || event_type || "").toLowerCase();
     let normalizedStatus: "started" | "answered" | "ended" | "missed" | "rejected" = "started";
 
@@ -437,7 +447,7 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       normalizedStatus = "missed";
     }
 
-    // 4. Mongoose Upsert (Updated to modern options)
+    // 5. Construct Update Object
     const updateData: any = {
       callStatus: normalizedStatus,
       duration: duration || 0,
@@ -446,27 +456,28 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
     };
 
     if (record_url) updateData.recordingUrl = record_url;
-    if (meta.leadId) updateData.lead = meta.leadId;
-    if (meta.userId) updateData.caller = meta.userId;
-    if (meta.branchId) updateData.branch = meta.branchId;
+    if (userId) updateData.caller = userId;
+    if (branchId) updateData.branch = branchId;
+    if (leadId) updateData.lead = leadId;
 
+    // 6. Upsert Call Log into DB
     await CallLog.findOneAndUpdate(
       { callId: call_id },
       { $set: updateData },
       { upsert: true, returnDocument: "after" }
     );
 
-    // 5. Log Activity
-    if (normalizedStatus === "ended" && meta.leadId && meta.userId) {
+    // 7. Create Lead Activity Timeline Record on Completion
+    if (normalizedStatus === "ended" && leadId && userId) {
       await createLeadActivity({
-        leadId: meta.leadId,
+        leadId,
         activityType: "call_logged",
-        performedBy: meta.userId,
+        performedBy: userId,
         remark: `Outbound call ended. Duration: ${duration || 0}s`,
         metadata: {
           callId: call_id,
           recordingUrl: record_url,
-          branchId: meta.branchId,
+          branchId,
         },
       });
     }
