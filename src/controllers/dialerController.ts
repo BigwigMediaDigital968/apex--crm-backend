@@ -244,8 +244,91 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
   }
 };
 
+// export const handleCallEventsWebhook = async (req: Request, res: Response) => {
+//   try {
+//     const {
+//       call_id,
+//       call_status,
+//       event_type,
+//       duration,
+//       record_url,
+//       custom_data,
+//       from_number,
+//       to_number,
+//       from,
+//       to,
+//     } = req.body;
+
+//     if (!call_id) {
+//       return res.status(200).json({ status: "ignored_no_call_id" });
+//     }
+
+//     let meta: any = {};
+//     if (custom_data) {
+//       try {
+//         meta = typeof custom_data === "string" ? JSON.parse(custom_data) : custom_data;
+//       } catch {
+//         meta = {};
+//       }
+//     }
+
+//     const callerFrom = from_number || from || meta.fromNumber || "Unknown";
+//     const callerTo = to_number || to || meta.toNumber || "Unknown";
+
+//     // Combine status checking to handle different Stringee payload types
+//     const statusRaw = (call_status || event_type || "").toLowerCase();
+
+//     let normalizedStatus: "started" | "answered" | "ended" | "missed" | "rejected" = "started";
+//     if (statusRaw.includes("ended") || statusRaw.includes("completed")) normalizedStatus = "ended";
+//     else if (statusRaw.includes("answered")) normalizedStatus = "answered";
+//     else if (statusRaw.includes("busy") || statusRaw.includes("rejected")) normalizedStatus = "rejected";
+//     else if (statusRaw.includes("no_answer") || statusRaw.includes("missed")) normalizedStatus = "missed";
+
+//     // 1. Save or Update Call Log safely
+//     await CallLog.findOneAndUpdate(
+//       { callId: call_id },
+//       {
+//         $set: {
+//           callStatus: normalizedStatus,
+//           duration: duration || 0,
+//           fromNumber: callerFrom,
+//           toNumber: callerTo,
+//           ...(record_url && { recordingUrl: record_url }),
+//           ...(meta.leadId && { lead: meta.leadId }),
+//           ...(meta.userId && { caller: meta.userId }),
+//           ...(meta.branchId && { branch: meta.branchId }),
+//         },
+//       },
+//       { upsert: true, new: true }
+//     );
+
+//     // 2. Log activity only on completion
+//     if (normalizedStatus === "ended" && meta.leadId && meta.userId) {
+//       await createLeadActivity({
+//         leadId: meta.leadId,
+//         activityType: "call_logged",
+//         performedBy: meta.userId,
+//         remark: `Outbound call ended. Duration: ${duration || 0}s`,
+//         metadata: {
+//           callId: call_id,
+//           recordingUrl: record_url,
+//           branchId: meta.branchId,
+//         },
+//       });
+//     }
+
+//     return res.status(200).json({ status: "success" });
+//   } catch (error: any) {
+//     console.error("[Call Event Error]:", error);
+//     return res.status(500).json({ message: error.message });
+//   }
+// };
+
 export const handleCallEventsWebhook = async (req: Request, res: Response) => {
   try {
+    // 1. Log full incoming body to debug payload issues
+    console.log("[Stringee Event Payload]:", JSON.stringify(req.body, null, 2));
+
     const {
       call_id,
       call_status,
@@ -263,46 +346,59 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ status: "ignored_no_call_id" });
     }
 
+    // 2. Safely parse custom_data regardless of Stringee's encoding format
     let meta: any = {};
     if (custom_data) {
       try {
-        meta = typeof custom_data === "string" ? JSON.parse(custom_data) : custom_data;
-      } catch {
-        meta = {};
+        if (typeof custom_data === "string") {
+          meta = JSON.parse(custom_data);
+        } else if (typeof custom_data === "object") {
+          meta = custom_data;
+        }
+      } catch (err) {
+        console.error("[Stringee Webhook] JSON parse error for custom_data:", err);
       }
     }
 
     const callerFrom = from_number || from || meta.fromNumber || "Unknown";
     const callerTo = to_number || to || meta.toNumber || "Unknown";
 
-    // Combine status checking to handle different Stringee payload types
-    const statusRaw = (call_status || event_type || "").toLowerCase();
-
+    // 3. Robust Status Normalization
+    const rawStatus = String(call_status || event_type || "").toLowerCase();
     let normalizedStatus: "started" | "answered" | "ended" | "missed" | "rejected" = "started";
-    if (statusRaw.includes("ended") || statusRaw.includes("completed")) normalizedStatus = "ended";
-    else if (statusRaw.includes("answered")) normalizedStatus = "answered";
-    else if (statusRaw.includes("busy") || statusRaw.includes("rejected")) normalizedStatus = "rejected";
-    else if (statusRaw.includes("no_answer") || statusRaw.includes("missed")) normalizedStatus = "missed";
 
-    // 1. Save or Update Call Log safely
-    await CallLog.findOneAndUpdate(
+    if (rawStatus.includes("ended") || rawStatus.includes("completed")) {
+      normalizedStatus = "ended";
+    } else if (rawStatus.includes("answered")) {
+      normalizedStatus = "answered";
+    } else if (rawStatus.includes("busy") || rawStatus.includes("rejected")) {
+      normalizedStatus = "rejected";
+    } else if (rawStatus.includes("no_answer") || rawStatus.includes("missed")) {
+      normalizedStatus = "missed";
+    }
+
+    // 4. Perform Upsert with Optional Fields
+    const updateData: any = {
+      callStatus: normalizedStatus,
+      duration: duration || 0,
+      fromNumber: callerFrom,
+      toNumber: callerTo,
+    };
+
+    if (record_url) updateData.recordingUrl = record_url;
+    if (meta.leadId) updateData.lead = meta.leadId;
+    if (meta.userId) updateData.caller = meta.userId;
+    if (meta.branchId) updateData.branch = meta.branchId;
+
+    const updatedLog = await CallLog.findOneAndUpdate(
       { callId: call_id },
-      {
-        $set: {
-          callStatus: normalizedStatus,
-          duration: duration || 0,
-          fromNumber: callerFrom,
-          toNumber: callerTo,
-          ...(record_url && { recordingUrl: record_url }),
-          ...(meta.leadId && { lead: meta.leadId }),
-          ...(meta.userId && { caller: meta.userId }),
-          ...(meta.branchId && { branch: meta.branchId }),
-        },
-      },
+      { $set: updateData },
       { upsert: true, new: true }
     );
 
-    // 2. Log activity only on completion
+    console.log("[CallLog Saved Successfully]:", updatedLog._id);
+
+    // 5. Create Lead Activity Log when call completes
     if (normalizedStatus === "ended" && meta.leadId && meta.userId) {
       await createLeadActivity({
         leadId: meta.leadId,
