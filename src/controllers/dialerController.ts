@@ -323,12 +323,8 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
 //     return res.status(500).json({ message: error.message });
 //   }
 // };
-
 export const handleCallEventsWebhook = async (req: Request, res: Response) => {
   try {
-    // 1. Log full incoming body to debug payload issues
-    console.log("[Stringee Event Payload]:", JSON.stringify(req.body, null, 2));
-
     const {
       call_id,
       call_status,
@@ -346,24 +342,30 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ status: "ignored_no_call_id" });
     }
 
-    // 2. Safely parse custom_data regardless of Stringee's encoding format
+    // 1. Safe parsing for custom_data
     let meta: any = {};
     if (custom_data) {
       try {
-        if (typeof custom_data === "string") {
-          meta = JSON.parse(custom_data);
-        } else if (typeof custom_data === "object") {
-          meta = custom_data;
-        }
-      } catch (err) {
-        console.error("[Stringee Webhook] JSON parse error for custom_data:", err);
+        meta = typeof custom_data === "string" ? JSON.parse(custom_data) : custom_data;
+      } catch {
+        meta = {};
       }
     }
 
-    const callerFrom = from_number || from || meta.fromNumber || "Unknown";
-    const callerTo = to_number || to || meta.toNumber || "Unknown";
+    // 2. Safely extract string numbers from Stringee primitive OR object fields
+    const callerFrom =
+      (typeof from === "object" ? from?.number || from?.alias : from) ||
+      from_number ||
+      meta.fromNumber ||
+      "Unknown";
 
-    // 3. Robust Status Normalization
+    const callerTo =
+      (typeof to === "object" ? to?.number || to?.alias : to) ||
+      to_number ||
+      meta.toNumber ||
+      "Unknown";
+
+    // 3. Status Normalization
     const rawStatus = String(call_status || event_type || "").toLowerCase();
     let normalizedStatus: "started" | "answered" | "ended" | "missed" | "rejected" = "started";
 
@@ -377,12 +379,12 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       normalizedStatus = "missed";
     }
 
-    // 4. Perform Upsert with Optional Fields
+    // 4. Mongoose Upsert (Updated to modern options)
     const updateData: any = {
       callStatus: normalizedStatus,
       duration: duration || 0,
-      fromNumber: callerFrom,
-      toNumber: callerTo,
+      fromNumber: String(callerFrom),
+      toNumber: String(callerTo),
     };
 
     if (record_url) updateData.recordingUrl = record_url;
@@ -390,15 +392,13 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
     if (meta.userId) updateData.caller = meta.userId;
     if (meta.branchId) updateData.branch = meta.branchId;
 
-    const updatedLog = await CallLog.findOneAndUpdate(
+    await CallLog.findOneAndUpdate(
       { callId: call_id },
       { $set: updateData },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
 
-    console.log("[CallLog Saved Successfully]:", updatedLog._id);
-
-    // 5. Create Lead Activity Log when call completes
+    // 5. Log Activity
     if (normalizedStatus === "ended" && meta.leadId && meta.userId) {
       await createLeadActivity({
         leadId: meta.leadId,
