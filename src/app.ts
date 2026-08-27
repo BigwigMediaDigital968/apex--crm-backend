@@ -24,10 +24,27 @@ app.use(
   helmet()
 );
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://apex-crm-xi.vercel.app",
+  "https://www.dealqix.com/"
+];
+
 app.use(
   cors({
-    origin: env.clientUrl,
-    credentials: true
+    origin: (origin, callback) => {
+      // Allow requests without an origin (Postman, server-to-server, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
   })
 );
 
