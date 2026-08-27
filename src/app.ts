@@ -27,7 +27,7 @@ app.use(
 const allowedOrigins = [
   "http://localhost:5173",
   "https://apex-crm-xi.vercel.app",
-  "https://www.dealqix.com/"
+  "https://www.dealqix.com"
 ];
 
 app.use(
