@@ -174,6 +174,7 @@ export const getUserByIdController = async (req: Request, res: Response) => {
       role: user.role,
       branches: user.branches,
       isActive: user.isActive,
+      createdAt: user.createdAt,
     },
   });
 };
