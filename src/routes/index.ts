@@ -2,6 +2,7 @@ import { Router } from "express";
 import branchRoutes from "./branch.routes.js";
 import authRoutes from "./auth.routes.js";
 import userRoutes from "./user.routes.js";
+import lateCheckInRoutes from "./lateCheckIn.routes.js";
 import permissionRoutes from "./permission.route.js";
 import sessionRoutes from "./session.routes.js";
 import auditRoutes from "./audit.routes.js";
@@ -32,6 +33,7 @@ router.get("/health", (_req, res) => {
 router.use("/branches", branchRoutes);
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
+router.use("/late-checkin", lateCheckInRoutes);
 router.use("/permissions", permissionRoutes);
 router.use("/sessions", sessionRoutes);
 router.use("/audit-logs", auditRoutes);

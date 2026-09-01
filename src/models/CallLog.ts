@@ -1,36 +1,3 @@
-// // src/models/CallLog.ts
-// import mongoose, { Schema, Document } from "mongoose";
-
-// export interface ICallLog extends Document {
-//   lead: mongoose.Types.ObjectId;
-//   caller: mongoose.Types.ObjectId; // User/Employee ID
-//   branch: mongoose.Types.ObjectId;
-//   callId: string; // Stringee Call ID
-//   fromNumber: string;
-//   toNumber: string;
-//   callStatus: "started" | "answered" | "ended" | "missed" | "rejected";
-//   duration: number; // in seconds
-//   recordingUrl?: string;
-//   createdAt: Date;
-// }
-
-// const callLogSchema = new Schema<ICallLog>(
-//   {
-//     lead: { type: Schema.Types.ObjectId, ref: "Lead", required: true, index: true },
-//     caller: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-//     branch: { type: Schema.Types.ObjectId, ref: "Branch", required: true, index: true },
-//     callId: { type: String, required: true, unique: true },
-//     fromNumber: { type: String, required: true },
-//     toNumber: { type: String, required: true },
-//     callStatus: { type: String, enum: ["started", "answered", "ended", "missed", "rejected"], default: "started" },
-//     duration: { type: Number, default: 0 },
-//     recordingUrl: { type: String },
-//   },
-//   { timestamps: true }
-// );
-
-// export const CallLog = mongoose.model<ICallLog>("CallLog", callLogSchema);
-
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface ICallLog extends Document {

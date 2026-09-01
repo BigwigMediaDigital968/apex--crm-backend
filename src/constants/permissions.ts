@@ -49,6 +49,8 @@ export const PERMISSIONS = {
   ATTENDANCE_MANAGE: "attendance:manage",
   ATTENDANCE_REPORT: "attendance:report",
   ATTENDANCE_EXPORT: "attendance:export",
+  LATE_CHECKIN_SUBMIT: "attendance:late-checkin:submit",
+  LATE_CHECKIN_APPROVE: "attendance:late-checkin:approve",
 
   // Holidays
   HOLIDAY_VIEW: "holiday:view",
