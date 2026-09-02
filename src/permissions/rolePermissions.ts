@@ -179,6 +179,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.ATTENDANCE_REPORT,
     PERMISSIONS.LATE_CHECKIN_APPROVE,
 
+    // Branch Holidays
+    PERMISSIONS.HOLIDAY_VIEW,
+
     // Leave Management
     PERMISSIONS.LEAVE_VIEW,
     PERMISSIONS.LEAVE_CREATE,
@@ -268,6 +271,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Branch
     PERMISSIONS.BRANCH_VIEW,
+
+    // Branch Holidays
+    PERMISSIONS.HOLIDAY_VIEW,
 
     // Employee Details
     PERMISSIONS.EMPLOYEE_VIEW,
