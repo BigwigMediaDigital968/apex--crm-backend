@@ -1,0 +1,141 @@
+import { Request, Response } from "express";
+import { StringeeNumber } from "../models/StringeeNumber.js";
+import { EmployeeProfile } from "../models/EmployeeProfile.js";
+import { User } from "../models/User.js";
+import { ROLES } from "../constants/roles.js";
+
+// 1. Add new Stringee Phone Number to inventory
+export const createNumber = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, label, branchId } = req.body;
+    const currentUser = (req as any).user;
+
+    if (!currentUser) {
+      return res
+        .status(401)
+        .json({ message: "Unauthorized: User payload missing" });
+    }
+
+    const userId = currentUser.id || currentUser._id;
+
+    const existing = await StringeeNumber.findOne({ phoneNumber });
+    if (existing) {
+      return res.status(400).json({ message: "Phone number already exists" });
+    }
+
+    let assignedBranch = branchId;
+    if (currentUser.role === ROLES.ADMIN) {
+      if (!currentUser.branches?.includes(branchId)) {
+        return res
+          .status(403)
+          .json({ message: "Cannot create number for unassigned branch" });
+      }
+    }
+
+    const numberDoc = await StringeeNumber.create({
+      phoneNumber,
+      label,
+      branch: assignedBranch || currentUser.branches?.[0],
+      createdBy: userId,
+    });
+
+    return res.status(201).json({ success: true, data: numberDoc });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// 2. Fetch inventory numbers (Role Scoped)
+export const getNumbers = async (req: Request, res: Response) => {
+  try {
+    const currentUser = (req as any).user;
+    let filter: any = {};
+
+    if (
+      currentUser.role === ROLES.ADMIN ||
+      currentUser.role === ROLES.MANAGER
+    ) {
+      filter.branch = { $in: currentUser.branches };
+    }
+
+    const numbers = await StringeeNumber.find(filter)
+      .populate("assignedTo", "name email role")
+      .populate("branch", "name")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, data: numbers });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// 3. Assign / Unassign number to an Employee
+export const assignNumber = async (req: Request, res: Response) => {
+  try {
+    const { numberId } = req.params;
+    const { targetUserId } = req.body; // Pass null to unassign
+    const currentUser = (req as any).user;
+
+    const numberDoc = await StringeeNumber.findById(numberId);
+    if (!numberDoc) {
+      return res.status(404).json({ message: "Number entry not found" });
+    }
+
+    if (targetUserId) {
+      const targetUser = await User.findById(targetUserId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Target user not found" });
+      }
+
+      // Hierarchy validation
+      if (currentUser.role === ROLES.ADMIN) {
+        const hasCommonBranch = targetUser.branches.some((b) =>
+          currentUser.branches
+            .map((cb: any) => cb.toString())
+            .includes(b.toString()),
+        );
+        if (!hasCommonBranch) {
+          return res
+            .status(403)
+            .json({ message: "Cannot assign to user outside your branch" });
+        }
+      }
+
+      if (currentUser.role === ROLES.MANAGER) {
+        const empProfile = await EmployeeProfile.findOne({
+          user: targetUserId,
+        });
+        if (
+          empProfile?.reportingManager?.toString() !==
+          currentUser._id.toString()
+        ) {
+          return res
+            .status(403)
+            .json({ message: "Can only assign to direct reportees" });
+        }
+      }
+
+      // Ensure target employee doesn't already have another number assigned
+      await StringeeNumber.updateMany(
+        { assignedTo: targetUserId },
+        { $unset: { assignedTo: 1, assignedBy: 1, assignedAt: 1 } },
+      );
+    }
+
+    numberDoc.assignedTo = targetUserId || undefined;
+    numberDoc.assignedBy = targetUserId ? currentUser._id : undefined;
+    numberDoc.assignedAt = targetUserId ? new Date() : undefined;
+
+    await numberDoc.save();
+
+    return res.status(200).json({
+      success: true,
+      message: targetUserId
+        ? "Number assigned successfully"
+        : "Number unassigned successfully",
+      data: numberDoc,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message });
+  }
+};

@@ -19,6 +19,7 @@ import performanceRoutes from "./performance.routes.js";
 import revenueRoutes from "./revenue.routes.js";
 import contestRoutes from "./contest.routes.js";
 import uploadRoutes from "./upload.routes.js";
+import stringeeNumberroutes from "./stringeeNumber.routes.js";
 
 const router = Router();
 
@@ -50,5 +51,6 @@ router.use("/leave-balances", leaveBalanceRoutes);
 router.use("/performance", performanceRoutes);
 router.use("/revenue", revenueRoutes);
 router.use("/contest", contestRoutes);
+router.use("/stringee-numbers", stringeeNumberroutes);
 
 export default router;

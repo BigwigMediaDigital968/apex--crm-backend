@@ -4,6 +4,77 @@ import { CallLog } from "../models/CallLog.js";
 import { Lead } from "../models/Lead.js";
 import { createLeadActivity } from "../services/lead.service.js";
 import { User } from "../models/User.js";
+import { StringeeNumber } from "../models/StringeeNumber.js";
+
+// export const getStringeeTokenController = async (
+//   req: Request,
+//   res: Response,
+// ) => {
+//   try {
+//     if (!req.user) {
+//       return res.status(401).json({ message: "Unauthorized" });
+//     }
+
+//     const token = generateStringeeToken(req.user.id.toString());
+//     return res.status(200).json({ success: true, token });
+//   } catch (error: any) {
+//     return res.status(500).json({ message: error.message });
+//   }
+// };
+
+// export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
+//   try {
+//     const body = req.body || {};
+//     const query = req.query || {};
+
+//     const rawTo = query.to || body.to || "";
+
+//     // Stringee forwards client customData as custom_data or customData in query/body
+//     const rawCustomData =
+//       query.custom_data ||
+//       body.custom_data ||
+//       query.customData ||
+//       body.customData ||
+//       "";
+
+//     let customDataString = "";
+//     if (typeof rawCustomData === "object") {
+//       customDataString = JSON.stringify(rawCustomData);
+//     } else {
+//       customDataString = String(rawCustomData);
+//     }
+
+//     const cleanTo = String(rawTo).replace(/[^\d+]/g, "");
+//     const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
+//     const cleanHotline = String(rawHotline).replace(/[^\d+]/g, "");
+
+//     // SCCO: You MUST include customData inside the connect action
+//     const scco = [
+//       {
+//         action: "connect",
+//         from: {
+//           type: "external",
+//           number: cleanHotline,
+//           alias: cleanHotline,
+//         },
+//         to: {
+//           type: "external",
+//           number: cleanTo,
+//           alias: cleanTo,
+//         },
+//         customData: customDataString, // <--- THIS FORWARDS METADATA TO EVENT WEBHOOKS
+//         timeout: 45,
+//         record: true,
+//       },
+//     ];
+
+//     res.setHeader("Content-Type", "application/json");
+//     return res.status(200).json(scco);
+//   } catch (error: any) {
+//     console.error("[Stringee Webhook Error]:", error);
+//     return res.status(500).json({ error: error.message });
+//   }
+// };
 
 export const getStringeeTokenController = async (
   req: Request,
@@ -27,6 +98,7 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
     const query = req.query || {};
 
     const rawTo = query.to || body.to || "";
+    const rawFrom = query.from || body.from || ""; // User ID or App Client ID from WebRTC SDK
 
     // Stringee forwards client customData as custom_data or customData in query/body
     const rawCustomData =
@@ -44,24 +116,39 @@ export const handleAnswerUrlWebhook = async (req: Request, res: Response) => {
     }
 
     const cleanTo = String(rawTo).replace(/[^\d+]/g, "");
-    const rawHotline = process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
-    const cleanHotline = String(rawHotline).replace(/[^\d+]/g, "");
 
-    // SCCO: You MUST include customData inside the connect action
+    // 1. Dynamic Caller ID Resolution based on assigned employee number
+    let outboundCallerId =
+      process.env.STRINGEE_HOTLINE_NUMBER || "917971730788";
+
+    if (rawFrom) {
+      const assignedNumberDoc = await StringeeNumber.findOne({
+        assignedTo: rawFrom,
+        isActive: true,
+      }).lean();
+
+      if (assignedNumberDoc?.phoneNumber) {
+        outboundCallerId = assignedNumberDoc.phoneNumber;
+      }
+    }
+
+    const cleanCallerId = String(outboundCallerId).replace(/[^\d+]/g, "");
+
+    // 2. SCCO Response with dynamic caller ID
     const scco = [
       {
         action: "connect",
         from: {
           type: "external",
-          number: cleanHotline,
-          alias: cleanHotline,
+          number: cleanCallerId,
+          alias: cleanCallerId,
         },
         to: {
           type: "external",
           number: cleanTo,
           alias: cleanTo,
         },
-        customData: customDataString, // <--- THIS FORWARDS METADATA TO EVENT WEBHOOKS
+        customData: customDataString,
         timeout: 45,
         record: true,
       },
@@ -195,37 +282,6 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
   }
 };
 
-// export const getLeadCallHistoryController = async (
-//   req: Request,
-//   res: Response,
-// ) => {
-//   try {
-//     const { leadId } = req.params;
-
-//     const lead = await Lead.findById(leadId);
-//     if (!lead || lead.isDeleted) {
-//       return res.status(404).json({ message: "Lead not found" });
-//     }
-
-//     const query: any = { lead: leadId };
-
-//     // Check branch scope using $in for Array safety
-//     if (req.user?.role !== "head" && req.user?.branches) {
-//       query.branch = Array.isArray(req.user.branches)
-//         ? { $in: req.user.branches }
-//         : req.user.branches;
-//     }
-
-//     const calls = await CallLog.find(query)
-//       .populate("caller", "name email role")
-//       .sort({ createdAt: -1 });
-
-//     return res.status(200).json({ success: true, data: calls });
-//   } catch (error: any) {
-//     return res.status(500).json({ message: error.message });
-//   }
-// };
-
 export const getLeadCallHistoryController = async (
   req: Request,
   res: Response,
@@ -259,58 +315,6 @@ export const getLeadCallHistoryController = async (
     return res.status(500).json({ message: error.message });
   }
 };
-
-// export const getCallLogs = async (req: Request, res: Response) => {
-//   try {
-//     const limit = parseInt(req.query.limit as string) || 10;
-//     const page = parseInt(req.query.page as string) || 1;
-//     const skip = (page - 1) * limit;
-
-//     const { status, leadId, userId, branchId, search } = req.query;
-
-//     // Dynamic Filter Construction
-//     const filter: any = {};
-
-//     if (status) filter.callStatus = status;
-//     if (leadId) filter.lead = leadId;
-//     if (userId) filter.caller = userId;
-//     if (branchId) filter.branch = branchId;
-
-//     // Search by Phone Number
-//     if (search) {
-//       filter.$or = [
-//         { toNumber: new RegExp(String(search), "i") },
-//         { fromNumber: new RegExp(String(search), "i") },
-//       ];
-//     }
-
-//     const [logs, total] = await Promise.all([
-//       CallLog.find(filter)
-//         .populate("lead", "name phone email company avatar")
-//         .populate("caller", "name email avatar")
-//         .populate("branch", "name")
-//         .sort({ createdAt: -1 })
-//         .skip(skip)
-//         .limit(limit)
-//         .lean(),
-//       CallLog.countDocuments(filter),
-//     ]);
-
-//     return res.status(200).json({
-//       success: true,
-//       data: logs,
-//       pagination: {
-//         total,
-//         page,
-//         limit,
-//         totalPages: Math.ceil(total / limit),
-//       },
-//     });
-//   } catch (error: any) {
-//     console.error("[Get Call Logs Error]:", error);
-//     return res.status(500).json({ message: error.message });
-//   }
-// };
 
 /**
  * GET /api/v1/dialer/logs
@@ -377,7 +381,6 @@ export const getCallLogs = async (req: Request, res: Response) => {
     return res.status(500).json({ message: error.message });
   }
 };
-
 
 /**
  * GET /api/v1/dialer/logs/:id
