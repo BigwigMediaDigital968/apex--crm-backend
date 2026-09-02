@@ -100,6 +100,7 @@ export const PERMISSIONS = {
   CALL_RECORDING_LISTEN: "call-recording:listen",
 
   STRINGEE_NUMBER_CREATE: "stringee_number:create",
+  STRINGEE_NUMBER_UPDATE: "stringee_number:update",
   STRINGEE_NUMBER_VIEW: "stringee_number:view",
   STRINGEE_NUMBER_ASSIGN: "stringee_number:assign",
   STRINGEE_NUMBER_DELETE: "stringee_number:delete",
