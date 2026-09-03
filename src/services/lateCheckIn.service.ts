@@ -1,3 +1,193 @@
+// import mongoose from "mongoose";
+// import {
+//   LateCheckInRequest,
+//   LATE_CHECKIN_STATUS,
+// } from "../models/LateCheckInRequest.js";
+// import { User } from "../models/User.js";
+// import { ROLES } from "../constants/roles.js";
+// import { AppError } from "../utils/AppError.js";
+// import {
+//   isAfterWorkingHours,
+//   getUtcNormalizedDate,
+// } from "../utils/workingHours.js";
+// import type { AuthenticatedUser } from "../types/auth.js";
+// import { Holiday } from "../models/Holiday.js";
+
+// export const submitLateCheckInReason = async (
+//   userId: string,
+//   reason: string,
+// ) => {
+//   const user = await User.findById(userId)
+//     .select("branches role isActive")
+//     .lean();
+//   if (!user || !user.isActive) {
+//     throw new AppError("Active account required", 403, "INACTIVE_USER");
+//   }
+
+//   const primaryBranch = user.branches?.[0];
+//   if (!primaryBranch) {
+//     throw new AppError("No branch assigned to user", 400, "NO_BRANCH");
+//   }
+
+//   const isAfter = await isAfterWorkingHours(primaryBranch.toString());
+//   if (!isAfter) {
+//     throw new AppError(
+//       "Regular check-in allowed; you are within working hours",
+//       400,
+//       "REGULAR_HOURS",
+//     );
+//   }
+
+//   const today = getUtcNormalizedDate();
+
+//   const existingRequest = await LateCheckInRequest.findOne({
+//     employee: userId,
+//     requestDate: today,
+//   });
+
+//   if (existingRequest) {
+//     if (existingRequest.status === LATE_CHECKIN_STATUS.PENDING) {
+//       throw new AppError(
+//         "A late check-in request is already pending approval",
+//         400,
+//         "REQUEST_PENDING",
+//       );
+//     }
+//     if (existingRequest.status === LATE_CHECKIN_STATUS.APPROVED) {
+//       throw new AppError(
+//         "Late check-in already approved for today",
+//         400,
+//         "ALREADY_APPROVED",
+//       );
+//     }
+//   }
+
+//   return LateCheckInRequest.create({
+//     employee: userId,
+//     branch: primaryBranch,
+//     requestDate: today,
+//     reason,
+//     status: LATE_CHECKIN_STATUS.PENDING,
+//   });
+// };
+
+// export const reviewLateCheckIn = async (
+//   reviewer: AuthenticatedUser,
+//   requestId: string,
+//   status:
+//     | typeof LATE_CHECKIN_STATUS.APPROVED
+//     | typeof LATE_CHECKIN_STATUS.REJECTED,
+//   remarks?: string,
+// ) => {
+//   if (
+//     ![ROLES.HEAD, ROLES.ADMIN, ROLES.MANAGER].includes(reviewer.role as any)
+//   ) {
+//     throw new AppError("Access denied", 403, "ACCESS_DENIED");
+//   }
+
+//   const request = await LateCheckInRequest.findById(requestId);
+//   if (!request) {
+//     throw new AppError("Late check-in request not found", 404, "NOT_FOUND");
+//   }
+
+//   // Branch access check for Manager/Admin
+//   if (reviewer.role !== ROLES.HEAD) {
+//     const reviewerBranchIds = (reviewer.branches || []).map((b) =>
+//       b.toString(),
+//     );
+//     if (!reviewerBranchIds.includes(request.branch.toString())) {
+//       throw new AppError(
+//         "Unauthorized for this branch",
+//         403,
+//         "BRANCH_ACCESS_DENIED",
+//       );
+//     }
+//   }
+
+//   request.status = status;
+//   request.reviewedBy = new mongoose.Types.ObjectId(reviewer.id);
+//   request.reviewedAt = new Date();
+//   if (remarks) request.reviewRemarks = remarks;
+
+//   await request.save();
+//   return request;
+// };
+
+// export const checkAccessPermission = async (
+//   userId: string,
+//   userRole: string,
+//   branchId?: string,
+// ) => {
+//   // Head/Admin/Manager can bypass late checks
+//   if (userRole !== ROLES.EMPLOYEE) {
+//     return { allowed: true };
+//   }
+
+//   if (branchId) {
+//     // Standardize to start and end of today's date in local time/UTC
+//     const startOfDay = new Date();
+//     startOfDay.setHours(0, 0, 0, 0);
+
+//     const endOfDay = new Date();
+//     endOfDay.setHours(23, 59, 59, 999);
+
+//     // Check if today is registered as an active holiday for the user's branch
+//     const holiday = await Holiday.findOne({
+//       branch: branchId,
+//       isActive: true,
+//       date: { $gte: startOfDay, $lte: endOfDay },
+//     }).lean();
+
+//     if (holiday) {
+//       return {
+//         allowed: false,
+//         reasonRequired: true,
+//         code: "HOLIDAY_LOCKOUT",
+//         message: `Branch is closed today due to holiday: ${holiday.name}. Admin approval required for access.`,
+//       };
+//     }
+//   }
+
+//   if (!branchId) return { allowed: true };
+
+//   const isAfter = await isAfterWorkingHours(branchId);
+//   if (!isAfter) {
+//     return { allowed: true }; // Normal working hours
+//   }
+
+//   const today = getUtcNormalizedDate();
+//   const request = await LateCheckInRequest.findOne({
+//     employee: userId,
+//     requestDate: today,
+//   });
+
+//   if (!request) {
+//     return {
+//       allowed: false,
+//       reasonRequired: true,
+//       message: "Working hours ended. Please submit a reason to log in.",
+//     };
+//   }
+
+//   if (request.status === LATE_CHECKIN_STATUS.PENDING) {
+//     return {
+//       allowed: false,
+//       reasonRequired: false,
+//       message: "Late check-in request is pending Head/Manager approval.",
+//     };
+//   }
+
+//   if (request.status === LATE_CHECKIN_STATUS.REJECTED) {
+//     return {
+//       allowed: false,
+//       reasonRequired: false,
+//       message: "Late check-in request was rejected.",
+//     };
+//   }
+
+//   return { allowed: true }; // Approved
+// };
+
 import mongoose from "mongoose";
 import {
   LateCheckInRequest,
@@ -20,21 +210,44 @@ export const submitLateCheckInReason = async (
   const user = await User.findById(userId)
     .select("branches role isActive")
     .lean();
+
   if (!user || !user.isActive) {
-    throw new AppError("Active account required", 403, "INACTIVE_USER");
+    throw new AppError(
+      "Active account required to submit check-in requests.",
+      403,
+      "INACTIVE_USER",
+    );
   }
 
   const primaryBranch = user.branches?.[0];
   if (!primaryBranch) {
-    throw new AppError("No branch assigned to user", 400, "NO_BRANCH");
+    throw new AppError(
+      "No primary branch assigned to your account. Please contact support.",
+      400,
+      "NO_BRANCH_ASSIGNED",
+    );
   }
 
+  // Check if today is a Holiday
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const isHoliday = await Holiday.exists({
+    branch: primaryBranch,
+    isActive: true,
+    date: { $gte: startOfDay, $lte: endOfDay },
+  });
+
   const isAfter = await isAfterWorkingHours(primaryBranch.toString());
-  if (!isAfter) {
+
+  // Prevent request submission if user is attempting during standard work hours
+  if (!isHoliday && !isAfter) {
     throw new AppError(
-      "Regular check-in allowed; you are within working hours",
+      "You are within normal working hours. Standard check-in is permitted without prior request.",
       400,
-      "REGULAR_HOURS",
+      "STANDARD_HOURS_ACTIVE",
     );
   }
 
@@ -48,16 +261,16 @@ export const submitLateCheckInReason = async (
   if (existingRequest) {
     if (existingRequest.status === LATE_CHECKIN_STATUS.PENDING) {
       throw new AppError(
-        "A late check-in request is already pending approval",
+        "A special access request is already pending review for today.",
         400,
-        "REQUEST_PENDING",
+        "REQUEST_ALREADY_PENDING",
       );
     }
     if (existingRequest.status === LATE_CHECKIN_STATUS.APPROVED) {
       throw new AppError(
-        "Late check-in already approved for today",
+        "Special access has already been granted for today.",
         400,
-        "ALREADY_APPROVED",
+        "REQUEST_ALREADY_APPROVED",
       );
     }
   }
@@ -82,22 +295,29 @@ export const reviewLateCheckIn = async (
   if (
     ![ROLES.HEAD, ROLES.ADMIN, ROLES.MANAGER].includes(reviewer.role as any)
   ) {
-    throw new AppError("Access denied", 403, "ACCESS_DENIED");
+    throw new AppError(
+      "You do not have permission to review check-in requests.",
+      403,
+      "ACCESS_DENIED",
+    );
   }
 
   const request = await LateCheckInRequest.findById(requestId);
   if (!request) {
-    throw new AppError("Late check-in request not found", 404, "NOT_FOUND");
+    throw new AppError(
+      "The requested check-in record was not found.",
+      404,
+      "REQUEST_NOT_FOUND",
+    );
   }
 
-  // Branch access check for Manager/Admin
   if (reviewer.role !== ROLES.HEAD) {
     const reviewerBranchIds = (reviewer.branches || []).map((b) =>
       b.toString(),
     );
     if (!reviewerBranchIds.includes(request.branch.toString())) {
       throw new AppError(
-        "Unauthorized for this branch",
+        "You do not have authorization to review requests for this branch.",
         403,
         "BRANCH_ACCESS_DENIED",
       );
@@ -118,44 +338,68 @@ export const checkAccessPermission = async (
   userRole: string,
   branchId?: string,
 ) => {
-  // Head/Admin/Manager can bypass late checks
+  // Non-employee roles bypass all time/holiday restrictions
   if (userRole !== ROLES.EMPLOYEE) {
     return { allowed: true };
   }
 
-  if (branchId) {
-    // Standardize to start and end of today's date in local time/UTC
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+  if (!branchId) return { allowed: true };
 
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+  const today = getUtcNormalizedDate();
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
 
-    // Check if today is registered as an active holiday for the user's branch
-    const holiday = await Holiday.findOne({
-      branch: branchId,
-      isActive: true,
-      date: { $gte: startOfDay, $lte: endOfDay },
-    }).lean();
+  // 1. Check Holiday Lockout
+  const holiday = await Holiday.findOne({
+    branch: branchId,
+    isActive: true,
+    date: { $gte: startOfDay, $lte: endOfDay },
+  }).lean();
 
-    if (holiday) {
+  if (holiday) {
+    const request = await LateCheckInRequest.findOne({
+      employee: userId,
+      requestDate: today,
+    });
+
+    if (!request) {
       return {
         allowed: false,
         reasonRequired: true,
         code: "HOLIDAY_LOCKOUT",
-        message: `Branch is closed today due to holiday: ${holiday.name}. Admin approval required for access.`,
+        message: `Branch is closed today for "${holiday.name}". Access requires admin approval.`,
       };
     }
+
+    if (request.status === LATE_CHECKIN_STATUS.PENDING) {
+      return {
+        allowed: false,
+        reasonRequired: false,
+        code: "HOLIDAY_APPROVAL_PENDING",
+        message: `Holiday access request for "${holiday.name}" is pending approval.`,
+      };
+    }
+
+    if (request.status === LATE_CHECKIN_STATUS.REJECTED) {
+      return {
+        allowed: false,
+        reasonRequired: false,
+        code: "HOLIDAY_ACCESS_DENIED",
+        message: `Holiday access request for "${holiday.name}" was rejected.`,
+      };
+    }
+
+    return { allowed: true }; // Approved for Holiday Access
   }
 
-  if (!branchId) return { allowed: true };
-
+  // 2. Check After-Hours Lockout
   const isAfter = await isAfterWorkingHours(branchId);
   if (!isAfter) {
     return { allowed: true }; // Normal working hours
   }
 
-  const today = getUtcNormalizedDate();
   const request = await LateCheckInRequest.findOne({
     employee: userId,
     requestDate: today,
@@ -165,7 +409,9 @@ export const checkAccessPermission = async (
     return {
       allowed: false,
       reasonRequired: true,
-      message: "Working hours ended. Please submit a reason to log in.",
+      code: "AFTER_HOURS_LOCKOUT",
+      message:
+        "Regular working hours have ended. Please provide a reason to request login access.",
     };
   }
 
@@ -173,7 +419,9 @@ export const checkAccessPermission = async (
     return {
       allowed: false,
       reasonRequired: false,
-      message: "Late check-in request is pending Head/Manager approval.",
+      code: "AFTER_HOURS_APPROVAL_PENDING",
+      message:
+        "Your late check-in request is currently pending manager approval.",
     };
   }
 
@@ -181,9 +429,10 @@ export const checkAccessPermission = async (
     return {
       allowed: false,
       reasonRequired: false,
-      message: "Late check-in request was rejected.",
+      code: "AFTER_HOURS_ACCESS_DENIED",
+      message: "Your late check-in request was rejected.",
     };
   }
 
-  return { allowed: true }; // Approved
+  return { allowed: true }; // Approved for After-Hours Access
 };
