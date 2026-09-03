@@ -11,6 +11,7 @@ import {
   getUtcNormalizedDate,
 } from "../utils/workingHours.js";
 import type { AuthenticatedUser } from "../types/auth.js";
+import { Holiday } from "../models/Holiday.js";
 
 export const submitLateCheckInReason = async (
   userId: string,
@@ -122,6 +123,31 @@ export const checkAccessPermission = async (
     return { allowed: true };
   }
 
+  if (branchId) {
+    // Standardize to start and end of today's date in local time/UTC
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Check if today is registered as an active holiday for the user's branch
+    const holiday = await Holiday.findOne({
+      branch: branchId,
+      isActive: true,
+      date: { $gte: startOfDay, $lte: endOfDay },
+    }).lean();
+
+    if (holiday) {
+      return {
+        allowed: false,
+        reasonRequired: true,
+        code: "HOLIDAY_LOCKOUT",
+        message: `Branch is closed today due to holiday: ${holiday.name}. Admin approval required for access.`,
+      };
+    }
+  }
+
   if (!branchId) return { allowed: true };
 
   const isAfter = await isAfterWorkingHours(branchId);
@@ -161,4 +187,3 @@ export const checkAccessPermission = async (
 
   return { allowed: true }; // Approved
 };
-
