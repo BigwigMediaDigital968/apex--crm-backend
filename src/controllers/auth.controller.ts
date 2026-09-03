@@ -15,6 +15,70 @@ import { auditRequest } from "../utils/audit.js";
 import { AUDIT_ACTIONS } from "../constants/auditActions.js";
 import { AUDIT_ENTITIES } from "../constants/auditEntities.js";
 
+// export const loginController = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction,
+// ) => {
+//   try {
+//     const data = loginSchema.parse(req.body || {});
+
+//     const result = await loginUser(
+//       data.email,
+//       data.password,
+//       req.get("user-agent"),
+//       req.ip,
+//     );
+
+//     // 1. Working Hours & Late Check-in Guard
+//     const primaryBranchId = result.user.branches?.[0]?.toString();
+//     const access = await checkAccessPermission(
+//       result.user._id.toString(),
+//       result.user.role,
+//       primaryBranchId,
+//     );
+
+//     if (!access.allowed) {
+//       return res.status(403).json({
+//         success: false,
+//         code: "AFTER_HOURS_LOCKOUT",
+//         message: access.message,
+//         reasonRequired: access.reasonRequired,
+//         user: {
+//           id: result.user._id,
+//           name: result.user.name,
+//           email: result.user.email,
+//           role: result.user.role,
+//           branch: primaryBranchId,
+//         },
+//       });
+//     }
+
+//     // 2. Audit and Return Token on Valid Access
+//     await auditRequest({
+//       req,
+//       action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+//       entity: AUDIT_ENTITIES.AUTH,
+//       entityId: result.user._id,
+//       metadata: {
+//         role: result.user.role,
+//       },
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Login successful",
+//       data: {
+//         user: result.user,
+//         accessToken: result.accessToken,
+//         refreshToken: result.refreshToken,
+//       },
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 export const loginController = async (
   req: Request,
   res: Response,
@@ -30,7 +94,7 @@ export const loginController = async (
       req.ip,
     );
 
-    // 1. Working Hours & Late Check-in Guard
+    // 1. Working Hours, Holiday & Late Check-in Guard
     const primaryBranchId = result.user.branches?.[0]?.toString();
     const access = await checkAccessPermission(
       result.user._id.toString(),
@@ -41,7 +105,7 @@ export const loginController = async (
     if (!access.allowed) {
       return res.status(403).json({
         success: false,
-        code: "AFTER_HOURS_LOCKOUT",
+        code: access.code || "AFTER_HOURS_LOCKOUT", // Dynamically supports "HOLIDAY_LOCKOUT"
         message: access.message,
         reasonRequired: access.reasonRequired,
         user: {
@@ -78,6 +142,7 @@ export const loginController = async (
     next(error);
   }
 };
+
 
 export const refreshController = async (
   req: Request,
