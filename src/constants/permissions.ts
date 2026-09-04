@@ -214,12 +214,24 @@ export const PERMISSIONS = {
   REPORT_VIEW: "report:view",
   REPORT_EXPORT: "report:export",
 
+  // AUDIT & ACTIVITY LOGS
   // =========================================================
-  // AUDIT
-  // =========================================================
-
   AUDIT_VIEW: "audit:view",
   AUDIT_READ: "audit:read",
+
+  // Specific Granular Activity Permissions
+  ACTIVITY_LOG_VIEW: "activity-log:view",
+  ACTIVITY_LOG_EXPORT: "activity-log:export",
+  ACTIVITY_LOG_DELETE: "activity-log:delete",
+
+  // Module-Specific Activity Stream Permissions
+  ACTIVITY_LOG_USER_VIEW: "activity-log:user:view",
+  ACTIVITY_LOG_LEAD_VIEW: "activity-log:lead:view",
+  ACTIVITY_LOG_STRINGEE_VIEW: "activity-log:stringee:view",
+  ACTIVITY_LOG_TASK_VIEW: "activity-log:task:view",
+  ACTIVITY_LOG_ATTENDANCE_VIEW: "activity-log:attendance:view",
+  ACTIVITY_LOG_LEAVE_VIEW: "activity-log:leave:view",
+  ACTIVITY_LOG_REVENUE_VIEW: "activity-log:revenue:view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

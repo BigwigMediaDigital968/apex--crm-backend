@@ -1,5 +1,93 @@
-import { Router } from "express";
+// import { Router } from "express";
 
+// import {
+//   createBranchController,
+//   getBranchAttendanceConfigController,
+//   getBranchesController,
+//   updateBranchAttendanceConfigController,
+//   updateBranchController,
+//   updateBranchStatusController,
+// } from "../controllers/branch.controller.js";
+
+// import { authenticate } from "../middleware/auth.middleware.js";
+
+// import { authorize } from "../middleware/authorize.middleware.js";
+
+// import { PERMISSIONS } from "../constants/permissions.js";
+
+// import { requireBranchAccess } from "../middleware/branch.middleware.js";
+
+// import { getRequiredParam } from "../utils/requestParams.js";
+
+// const router = Router();
+
+// // CREATE BRANCH
+// router.post(
+//   "/",
+//   authenticate,
+//   authorize(PERMISSIONS.BRANCH_CREATE),
+//   createBranchController,
+// );
+
+// // READ / LIST BRANCHES (👈 Added route)
+// router.get(
+//   "/",
+//   authenticate,
+//   authorize(PERMISSIONS.BRANCH_VIEW),
+//   getBranchesController,
+// );
+
+// // UPDATE BRANCH
+// router.patch(
+//   "/:id",
+//   authenticate,
+//   authorize(PERMISSIONS.BRANCH_UPDATE),
+//   requireBranchAccess((req) => getRequiredParam(req, "id")),
+//   updateBranchController,
+// );
+
+// // ACTIVATE / DEACTIVATE BRANCH
+// router.patch(
+//   "/:id/status",
+//   authenticate,
+//   authorize(PERMISSIONS.BRANCH_UPDATE),
+//   requireBranchAccess((req) => getRequiredParam(req, "id")),
+//   updateBranchStatusController,
+// );
+
+// router.patch(
+//   "/:id/attendance-config",
+//   authenticate,
+//   authorize(PERMISSIONS.BRANCH_UPDATE),
+//   requireBranchAccess((req) =>
+//     typeof req.params.id === "string" ? req.params.id : undefined,
+//   ),
+//   updateBranchAttendanceConfigController,
+// );
+
+// router.get(
+//   "/:id/attendance-config",
+//   authenticate,
+//   authorize(PERMISSIONS.BRANCH_ATTENDANCE_VIEW),
+//   requireBranchAccess((req) =>
+//     typeof req.params.id === "string" ? req.params.id : undefined,
+//   ),
+//   getBranchAttendanceConfigController,
+// );
+
+// router.patch(
+//   "/:id/attendance-config",
+//   authenticate,
+//   authorize(PERMISSIONS.BRANCH_ATTENDANCE_UPDATE),
+//   requireBranchAccess((req) =>
+//     typeof req.params.id === "string" ? req.params.id : undefined,
+//   ),
+//   updateBranchAttendanceConfigController,
+// );
+
+// export default router;
+
+import { Router } from "express";
 import {
   createBranchController,
   getBranchAttendanceConfigController,
@@ -8,28 +96,29 @@ import {
   updateBranchController,
   updateBranchStatusController,
 } from "../controllers/branch.controller.js";
-
 import { authenticate } from "../middleware/auth.middleware.js";
-
 import { authorize } from "../middleware/authorize.middleware.js";
-
+import { trackActivity } from "../middleware/auditLogger.middleware.js";
 import { PERMISSIONS } from "../constants/permissions.js";
-
 import { requireBranchAccess } from "../middleware/branch.middleware.js";
-
 import { getRequiredParam } from "../utils/requestParams.js";
 
 const router = Router();
 
-// CREATE BRANCH
+// 1. CREATE BRANCH
 router.post(
   "/",
   authenticate,
   authorize(PERMISSIONS.BRANCH_CREATE),
+  trackActivity(
+    "BRANCH",
+    "CREATED",
+    (req) => `Created new branch: ${req.body?.name || "Unnamed Branch"}`,
+  ),
   createBranchController,
 );
 
-// READ / LIST BRANCHES (👈 Added route)
+// 2. READ / LIST BRANCHES
 router.get(
   "/",
   authenticate,
@@ -37,34 +126,36 @@ router.get(
   getBranchesController,
 );
 
-// UPDATE BRANCH
+// 3. UPDATE BRANCH
 router.patch(
   "/:id",
   authenticate,
   authorize(PERMISSIONS.BRANCH_UPDATE),
   requireBranchAccess((req) => getRequiredParam(req, "id")),
+  trackActivity(
+    "BRANCH",
+    "UPDATED",
+    (req) => `Updated details for branch ID: ${req.params.id}`,
+  ),
   updateBranchController,
 );
 
-// ACTIVATE / DEACTIVATE BRANCH
+// 4. ACTIVATE / DEACTIVATE BRANCH
 router.patch(
   "/:id/status",
   authenticate,
   authorize(PERMISSIONS.BRANCH_UPDATE),
   requireBranchAccess((req) => getRequiredParam(req, "id")),
+  trackActivity(
+    "BRANCH",
+    "STATUS_UPDATED",
+    (req) =>
+      `Updated status for branch ID: ${req.params.id} to '${req.body?.isActive ?? req.body?.status}'`,
+  ),
   updateBranchStatusController,
 );
 
-router.patch(
-  "/:id/attendance-config",
-  authenticate,
-  authorize(PERMISSIONS.BRANCH_UPDATE),
-  requireBranchAccess((req) =>
-    typeof req.params.id === "string" ? req.params.id : undefined,
-  ),
-  updateBranchAttendanceConfigController,
-);
-
+// 5. READ BRANCH ATTENDANCE CONFIG
 router.get(
   "/:id/attendance-config",
   authenticate,
@@ -75,12 +166,18 @@ router.get(
   getBranchAttendanceConfigController,
 );
 
+// 6. UPDATE BRANCH ATTENDANCE CONFIG
 router.patch(
   "/:id/attendance-config",
   authenticate,
   authorize(PERMISSIONS.BRANCH_ATTENDANCE_UPDATE),
   requireBranchAccess((req) =>
     typeof req.params.id === "string" ? req.params.id : undefined,
+  ),
+  trackActivity(
+    "BRANCH",
+    "UPDATED",
+    (req) => `Updated attendance configuration for branch ID: ${req.params.id}`,
   ),
   updateBranchAttendanceConfigController,
 );
