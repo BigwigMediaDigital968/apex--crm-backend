@@ -17,6 +17,7 @@ export const trackActivity = (
     | "ATTENDANCE"
     | "LEAVE"
     | "REVENUE"
+    | "REPORT"
     | "SYSTEM",
   action: string,
   getDescription?: (req: Request) => string,

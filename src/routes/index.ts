@@ -21,6 +21,7 @@ import contestRoutes from "./contest.routes.js";
 import uploadRoutes from "./upload.routes.js";
 import stringeeNumberroutes from "./stringeeNumber.routes.js";
 import activityLogRoutes from "./activityLog.routes.js";
+import reportRoutes from "./report.routes.js";
 
 const router = Router();
 
@@ -54,5 +55,6 @@ router.use("/revenue", revenueRoutes);
 router.use("/contest", contestRoutes);
 router.use("/stringee-numbers", stringeeNumberroutes);
 router.use("/activity-logs", activityLogRoutes);
+router.use("/reports", reportRoutes);
 
 export default router;
