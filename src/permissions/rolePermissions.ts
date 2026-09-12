@@ -154,6 +154,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.REVENUE_MANAGE,
     PERMISSIONS.REVENUE_VIEW,
 
+    // Contests
+    PERMISSIONS.CONTEST_VIEW_ALL,
+
     // Reports
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.REPORT_EXPORT,
@@ -161,6 +164,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // Audit
     PERMISSIONS.AUDIT_VIEW,
     PERMISSIONS.AUDIT_READ,
+    PERMISSIONS.ACTIVITY_LOG_VIEW,
   ],
 
   // =========================================================
@@ -261,6 +265,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Reports
     PERMISSIONS.REPORT_VIEW,
+
+    // Audit / Activity
+    PERMISSIONS.ACTIVITY_LOG_VIEW,
   ],
 
   // =========================================================

@@ -24,6 +24,36 @@ export const canCreateRole = (creatorRole: Role, targetRole: Role): boolean => {
   return allowedRoles.includes(targetRole);
 };
 
+/**
+ * Validates that none of the target branches already have an ADMIN assigned
+ * (excluding the current target user if updating).
+ */
+const validateAdminBranchLimits = async (
+  branchIds: Types.ObjectId[],
+  excludeUserId?: string,
+) => {
+  if (branchIds.length === 0) return;
+
+  const query: any = {
+    role: ROLES.ADMIN,
+    branches: { $in: branchIds },
+  };
+
+  if (excludeUserId) {
+    query._id = { $ne: new Types.ObjectId(excludeUserId) };
+  }
+
+  const existingAdmin = await User.findOne(query).select("branches");
+
+  if (existingAdmin) {
+    throw new AppError(
+      "One or more selected branches already have an Admin assigned. A branch can only have one Admin.",
+      400,
+      "BRANCH_ADMIN_LIMIT_EXCEEDED",
+    );
+  }
+};
+
 export const createUser = async (
   data: CreateUserInput,
   creatorId: string,
@@ -105,6 +135,38 @@ export const createUser = async (
   }
 
   // --- BATCH DATABASE LOOKUP ($in) ---
+  // const validBranchIds: Types.ObjectId[] = [];
+
+  // if (uniqueBranchIds.length > 0) {
+  //   const foundBranches = await Branch.find({
+  //     _id: { $in: uniqueBranchIds },
+  //     isActive: true,
+  //   }).select("_id");
+
+  //   if (foundBranches.length !== uniqueBranchIds.length) {
+  //     throw new AppError(
+  //       "One or more branches were not found or are inactive",
+  //       404,
+  //       "BRANCH_NOT_FOUND",
+  //     );
+  //   }
+
+  //   validBranchIds.push(...foundBranches.map((b) => b._id as Types.ObjectId));
+  // }
+
+  // const hashedPassword = await bcrypt.hash(password, 12);
+
+  // const user = await User.create({
+  //   name: name.trim(),
+  //   email: normalizedEmail,
+  //   password: hashedPassword,
+  //   role,
+  //   branches: validBranchIds,
+  //   createdBy: new Types.ObjectId(creatorId),
+  //   isActive: true,
+  // });
+
+  // --- BATCH DATABASE LOOKUP ($in) ---
   const validBranchIds: Types.ObjectId[] = [];
 
   if (uniqueBranchIds.length > 0) {
@@ -122,6 +184,11 @@ export const createUser = async (
     }
 
     validBranchIds.push(...foundBranches.map((b) => b._id as Types.ObjectId));
+  }
+
+  // --- ADMIN BRANCH ASSIGNMENT VALIDATION ---
+  if (role === ROLES.ADMIN) {
+    await validateAdminBranchLimits(validBranchIds);
   }
 
   const hashedPassword = await bcrypt.hash(password, 12);
@@ -231,11 +298,22 @@ export const updateUserBranches = async (
     );
   }
 
+  // const validBranchIds = foundBranches.map((b) => b._id as Types.ObjectId);
+
   const validBranchIds = foundBranches.map((b) => b._id as Types.ObjectId);
+
+  // --- ADMIN BRANCH ASSIGNMENT VALIDATION ---
+  if (targetUser.role === ROLES.ADMIN) {
+    await validateAdminBranchLimits(validBranchIds, targetUser._id.toString());
+  }
 
   // --- ACTOR PERMISSION CHECK ---
   if (actorRole !== ROLES.HEAD) {
     const actor = await User.findById(actorId).select("branches role");
+
+  // --- ACTOR PERMISSION CHECK ---
+  // if (actorRole !== ROLES.HEAD) {
+  //   const actor = await User.findById(actorId).select("branches role");
 
     if (!actor) {
       throw new AppError("Actor not found", 404, "ACTOR_NOT_FOUND");
@@ -523,8 +601,24 @@ export const updateUser = async (
     targetUser.name = data.name.trim();
   }
 
+  // if (data.role !== undefined) {
+  //   targetUser.role = data.role;
+  // }
+
+  if (data.name !== undefined) {
+    targetUser.name = data.name.trim();
+  }
+
+  // Handle role updates
   if (data.role !== undefined) {
-    targetUser.role = data.role;
+    const nextRole = data.role;
+
+    // --- ADMIN BRANCH ASSIGNMENT VALIDATION ---
+    if (nextRole === ROLES.ADMIN) {
+      await validateAdminBranchLimits(targetUser.branches, targetUser._id.toString());
+    }
+
+    targetUser.role = nextRole;
   }
 
   await targetUser.save();

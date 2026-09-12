@@ -184,7 +184,12 @@ router.post(
 );
 
 // 2. READ / LIST LEADS & CALL LOGS
-router.get("/:leadId/calls", authenticate, getLeadCallLogs);
+router.get(
+  "/:leadId/calls",
+  authenticate,
+  authorize(PERMISSIONS.CALL_LOG_VIEW),
+  getLeadCallLogs,
+);
 
 router.get(
   "/",

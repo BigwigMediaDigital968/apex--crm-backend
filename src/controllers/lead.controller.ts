@@ -94,8 +94,8 @@ export const getLeadCallLogs = async (req: Request, res: Response) => {
 
     // Filter by branch to enforce RBAC
     const filter: any = { lead: leadId };
-    if (req.user?.role !== "head") {
-      filter.branch = req.user?.branches;
+    if (req.user?.role !== "head" && req.user?.branches) {
+      filter.branch = { $in: req.user.branches };
     }
 
     const callHistory = await CallLog.find(filter)

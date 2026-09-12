@@ -138,6 +138,45 @@ export const getActiveContestsForUser = async (
   return contests;
 };
 
+export const getContestById = async (
+  contestId: string,
+  requestor: AuthenticatedUser,
+) => {
+  if (!Types.ObjectId.isValid(contestId)) {
+    throw new AppError("Invalid contest ID", 400, "INVALID_ID");
+  }
+
+  const contest = await Contest.findById(contestId)
+    .populate("branches", "name branchCode")
+    .populate("createdBy", "name email role");
+
+  if (!contest) {
+    throw new AppError("Contest not found", 404, "CONTEST_NOT_FOUND");
+  }
+
+  // Head/Admin can view any contest; everyone else only contests targeted
+  // at one of their own branches.
+  if (requestor.role !== ROLES.HEAD && requestor.role !== ROLES.ADMIN) {
+    const contestBranchIds = contest.branches.map((branch) =>
+      (branch as unknown as { _id: Types.ObjectId })._id.toString(),
+    );
+    const requestorBranchIds = requestor.branches.map((id) => id.toString());
+    const hasAccess = contestBranchIds.some((id) =>
+      requestorBranchIds.includes(id),
+    );
+
+    if (!hasAccess) {
+      throw new AppError(
+        "You do not have access to this contest",
+        403,
+        "ACCESS_DENIED",
+      );
+    }
+  }
+
+  return contest;
+};
+
 export const updateContestSchema = createContestSchema.partial();
 
 export const updateContest = async (

@@ -208,6 +208,14 @@ export const PERMISSIONS = {
   REVENUE_MANAGE: "revenue:manage",
 
   // =========================================================
+  // CONTESTS
+  // =========================================================
+
+  CONTEST_CREATE: "contest:create",
+  CONTEST_UPDATE: "contest:update",
+  CONTEST_VIEW_ALL: "contest:view-all",
+
+  // =========================================================
   // REPORTS
   // =========================================================
 

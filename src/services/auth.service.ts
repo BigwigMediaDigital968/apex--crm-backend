@@ -1,6 +1,6 @@
 import { User, type IUser } from "../models/User.js";
 
-import { comparePassword } from "../utils/password.js";
+import { comparePassword, hashPassword } from "../utils/password.js";
 
 import { generateAccessToken } from "../utils/jwt.js";
 
@@ -62,4 +62,57 @@ export const loginUser = async (
       branches: (user.branches || []).map((branch) => branch.toString()),
     },
   };
+};
+
+/**
+ * Self-service profile update. Deliberately name-only: email changes affect
+ * login identity and are handled through the admin-facing user management
+ * flow (PATCH /users/:id) instead.
+ */
+export const updateOwnProfile = async (
+  userId: string,
+  data: { name: string },
+) => {
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { name: data.name },
+    { new: true },
+  ).select("_id name email role branches isActive");
+
+  if (!user) {
+    throw new AppError("User account not found", 404, "USER_NOT_FOUND");
+  }
+
+  return user;
+};
+
+export const changeOwnPassword = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) => {
+  const user = (await User.findById(userId)
+    .select("+password")
+    .exec()) as IUser | null;
+
+  if (!user) {
+    throw new AppError("User account not found", 404, "USER_NOT_FOUND");
+  }
+
+  const passwordMatches = await comparePassword(
+    currentPassword,
+    user.password,
+  );
+
+  if (!passwordMatches) {
+    throw new AppError(
+      "Current password is incorrect",
+      401,
+      "INVALID_CURRENT_PASSWORD",
+    );
+  }
+
+  user.password = await hashPassword(newPassword);
+
+  await user.save();
 };

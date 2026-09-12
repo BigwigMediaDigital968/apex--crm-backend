@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import {
   createContest,
   getActiveContestsForUser,
+  getContestById,
   updateContest,
   toggleContestStatus,
   getAllContestsForAdmin,
@@ -70,6 +71,21 @@ export const getMyBranchContestsHandler = async (
 
     const contests = await getActiveContestsForUser(req.user);
     return res.status(200).json({ success: true, data: contests });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getContestByIdHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+
+    const contest = await getContestById(req.params.id as string, req.user);
+    return res.status(200).json({ success: true, data: contest });
   } catch (err) {
     next(err);
   }

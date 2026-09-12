@@ -227,15 +227,23 @@
 
 import type { NextFunction, Request, Response } from "express";
 
-import { loginUser } from "../services/auth.service.js";
-import { loginSchema } from "../validators/auth.validator.js";
+import {
+  loginUser,
+  updateOwnProfile,
+  changeOwnPassword,
+} from "../services/auth.service.js";
+import {
+  loginSchema,
+  updateMeSchema,
+  changePasswordSchema,
+} from "../validators/auth.validator.js";
 import {
   findValidSession,
   revokeSession,
   createSession,
 } from "../services/session.service.js";
 import { checkAccessPermission } from "../services/lateCheckIn.service.js";
-import { generateAccessToken } from "../utils/jwt.js";
+import { generateAccessToken, generateLateCheckInToken } from "../utils/jwt.js";
 import { User } from "../models/User.js";
 import { AppError } from "../utils/AppError.js";
 import { auditRequest } from "../utils/audit.js";
@@ -338,6 +346,9 @@ export const loginController = async (
         code: access.code || "ACCESS_RESTRICTED",
         message: access.message,
         reasonRequired: access.reasonRequired,
+        // Lets the client submit a late-checkin reason on the user's behalf
+        // without a full access token — see generateLateCheckInToken().
+        lockoutToken: generateLateCheckInToken(result.user._id.toString()),
         user: {
           id: result.user._id,
           name: result.user.name,
@@ -513,6 +524,77 @@ export const getMeController = async (
           updatedAt: user.updatedAt,
         },
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMeController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user?.id) {
+      throw new AppError("Authentication required.", 401, "UNAUTHORIZED");
+    }
+
+    const data = updateMeSchema.parse(req.body || {});
+
+    const user = await updateOwnProfile(req.user.id, data);
+
+    await auditRequest({
+      req,
+      action: AUDIT_ACTIONS.USER_UPDATED,
+      entity: AUDIT_ENTITIES.USER,
+      entityId: user._id.toString(),
+      metadata: { updatedFields: ["name"] },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      data: {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          branches: user.branches,
+          isActive: user.isActive,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changeMyPasswordController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user?.id) {
+      throw new AppError("Authentication required.", 401, "UNAUTHORIZED");
+    }
+
+    const data = changePasswordSchema.parse(req.body || {});
+
+    await changeOwnPassword(req.user.id, data.currentPassword, data.newPassword);
+
+    await auditRequest({
+      req,
+      action: AUDIT_ACTIONS.PASSWORD_CHANGED,
+      entity: AUDIT_ENTITIES.AUTH,
+      entityId: req.user.id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully.",
     });
   } catch (error) {
     next(error);

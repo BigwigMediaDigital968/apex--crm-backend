@@ -128,19 +128,51 @@ import {
   reviewLateCheckIn,
 } from "../services/lateCheckIn.service.js";
 import { ROLE_PERMISSIONS } from "../permissions/rolePermissions.js";
+import { verifyLateCheckInToken } from "../utils/jwt.js";
 
 const router = Router();
+
+/**
+ * Verifies the short-lived `lockoutToken` issued by loginController on an
+ * AFTER_HOURS_LOCKOUT / HOLIDAY_LOCKOUT response, and resolves the submitting
+ * user's ID from the token's signed claim rather than trusting a client-
+ * supplied `userId` — the previous version accepted any `userId` in the body
+ * with no proof of identity, letting anyone file a late-checkin request (or
+ * spam the approval queue) on another employee's behalf.
+ */
+const requireLateCheckInToken = (
+  req: import("express").Request,
+  res: import("express").Response,
+  next: import("express").NextFunction,
+) => {
+  const { lockoutToken } = req.body || {};
+
+  if (!lockoutToken || typeof lockoutToken !== "string") {
+    return res.status(401).json({
+      success: false,
+      message: "A valid lockout token is required.",
+      code: "LOCKOUT_TOKEN_REQUIRED",
+    });
+  }
+
+  try {
+    const payload = verifyLateCheckInToken(lockoutToken);
+    (req as any).user = { _id: payload.sub, id: payload.sub };
+    req.body.userId = payload.sub;
+    next();
+  } catch {
+    return res.status(401).json({
+      success: false,
+      message: "Your session for this request has expired. Please log in again.",
+      code: "INVALID_LOCKOUT_TOKEN",
+    });
+  }
+};
 
 // 1. SUBMIT LATE CHECK-IN REASON
 router.post(
   "/submit-reason",
-  (req, _res, next) => {
-    // Explicitly seed req.user so trackActivity gets the correct performing user ID
-    if (req.body?.userId) {
-      (req as any).user = { _id: req.body.userId };
-    }
-    next();
-  },
+  requireLateCheckInToken,
   trackActivity(
     "ATTENDANCE",
     "LATE_CHECKIN_SUBMITTED",
@@ -151,10 +183,10 @@ router.post(
     try {
       const { userId, reason } = req.body;
 
-      if (!userId || !reason) {
+      if (!reason) {
         return res.status(400).json({
           success: false,
-          message: "User ID and reason are required",
+          message: "A reason is required",
         });
       }
 

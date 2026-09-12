@@ -67,6 +67,8 @@ import {
   logoutController,
   getMeController,
   refreshController,
+  updateMeController,
+  changeMyPasswordController,
 } from "../controllers/auth.controller.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/authorize.middleware.js";
@@ -100,6 +102,28 @@ router.post(
 
 // Read-only / Test Routes (No tracking needed)
 router.get("/me", authenticate, getMeController);
+
+// 4. Update Own Profile (name only — email changes go through admin user management)
+router.patch(
+  "/me",
+  authenticate,
+  trackActivity("USER", "UPDATE_OWN_PROFILE", (req) => {
+    const user = (req as any).user;
+    return `${user?.name || user?.email || "User"} updated their own profile`;
+  }),
+  updateMeController,
+);
+
+// 5. Change Own Password
+router.patch(
+  "/me/password",
+  authenticate,
+  trackActivity("USER", "PASSWORD_CHANGED", (req) => {
+    const user = (req as any).user;
+    return `${user?.name || user?.email || "User"} changed their own password`;
+  }),
+  changeMyPasswordController,
+);
 
 router.get(
   "/test-branch-permission",
