@@ -457,20 +457,29 @@ export const listEmployees = async (
     page: number;
     limit: number;
     branchId?: string;
+    reportingManager?: string; // Add to options object
+    role?: string;
     status?: string;
     search?: string;
   },
 ) => {
   const filter: Record<string, unknown> = {};
 
+  // 1. Enforce manager branch scoping for non-HEAD roles
   if (context.role !== ROLES.HEAD) {
     filter.branch = {
       $in: context.branches.map((id) => new Types.ObjectId(id)),
     };
   }
 
+  // 2. Head role specific branch filtering
   if (options.branchId && context.role === ROLES.HEAD) {
     filter.branch = new Types.ObjectId(options.branchId);
+  }
+
+  // 3. Filter by reportingManager (Matches key added to Zod Schema)
+  if (options.reportingManager) {
+    filter.reportingManager = new Types.ObjectId(options.reportingManager);
   }
 
   if (options.status) {
@@ -479,27 +488,13 @@ export const listEmployees = async (
 
   if (options.search) {
     filter.$or = [
-      {
-        employeeCode: {
-          $regex: options.search,
-          $options: "i",
-        },
-      },
-      {
-        designation: {
-          $regex: options.search,
-          $options: "i",
-        },
-      },
-      {
-        department: {
-          $regex: options.search,
-          $options: "i",
-        },
-      },
+      { employeeCode: { $regex: options.search, $options: "i" } },
+      { designation: { $regex: options.search, $options: "i" } },
+      { department: { $regex: options.search, $options: "i" } },
     ];
   }
 
+  // 4. Force regular employee self-access limit
   if (context.role === ROLES.EMPLOYEE) {
     filter.user = new Types.ObjectId(context.userId);
   }
@@ -510,9 +505,8 @@ export const listEmployees = async (
     EmployeeProfile.find(filter)
       .populate("user", "name email role isActive")
       .populate("branch", "name code city")
-      .sort({
-        createdAt: -1,
-      })
+      .populate("reportingManager", "name email role")
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(options.limit)
       .lean(),

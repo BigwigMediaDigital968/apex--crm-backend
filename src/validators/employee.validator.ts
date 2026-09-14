@@ -120,16 +120,51 @@ export const updateEmployeeProfileSchema = createEmployeeProfileSchema
     employeeCode: z.string().trim().min(2).max(30).optional(),
   });
 
+// export const employeeListQuerySchema = z.object({
+//   page: z.coerce.number().int().min(1).default(1),
+
+//   limit: z.coerce.number().int().min(1).max(100).default(20),
+
+//   branchId: z.string().optional(),
+
+//   // Add reportingManager to allow manager-scoped queries
+//   reportingManager: z.string().optional(),
+
+//   // Add role if you filter accounts by ROLES (e.g. ROLES.EMPLOYEE)
+//   role: z.string().optional(),
+
+//   status: z
+//     .enum(Object.values(EMPLOYMENT_STATUS) as [string, ...string[]])
+//     .optional(),
+
+//   search: z.string().trim().max(100).optional(),
+// });
+
 export const employeeListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
 
   limit: z.coerce.number().int().min(1).max(100).default(20),
 
-  branchId: z.string().optional(),
-
-  status: z
-    .enum(Object.values(EMPLOYMENT_STATUS) as [string, ...string[]])
+  // Accept a single string or an array of branch IDs
+  branchId: z
+    .union([z.string(), z.array(z.string())])
+    .transform((val) => {
+      // Handles comma-separated string formats (e.g., "id1,id2") by converting to an array
+      if (typeof val === "string" && val.includes(",")) {
+        return val.split(",").map((id) => id.trim());
+      }
+      return val;
+    })
     .optional(),
+
+  reportingManager: z.string().optional(),
+
+  role: z.string().optional(),
+
+  // status: z
+  //   .enum(Object.values(EMPLOYMENT_STATUS) as [string, ...string[]])
+  //   .optional(),
+  status: z.nativeEnum(EMPLOYMENT_STATUS).optional(),
 
   search: z.string().trim().max(100).optional(),
 });
