@@ -74,6 +74,7 @@ export const getEmployeeLeaveBalancesController = async (
 ) => {
   try {
     const userId = req.user?.id;
+    const userRole = req.user?.role; // Ensure role is available on req.user
 
     if (!userId) {
       return res.status(401).json({
@@ -82,13 +83,19 @@ export const getEmployeeLeaveBalancesController = async (
       });
     }
 
-    const employeeId = String(req.params.employeeId);
+    let targetEmployeeId = String(req.params.employeeId);
+
+    // If non-admin/non-manager, restrict employeeId strictly to the authenticated user's ID
+    if (userRole === "employee") {
+      targetEmployeeId = userId;
+    }
+
     const year = req.query.year
       ? Number(req.query.year)
       : new Date().getFullYear();
 
     const result = await getEmployeeLeaveBalances({
-      employeeId,
+      employeeId: targetEmployeeId,
       year,
     });
 

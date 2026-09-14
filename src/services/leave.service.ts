@@ -69,18 +69,29 @@ export const createLeaveRequest = async (
   actorId: string,
 ) => {
   return runTransaction(async (session) => {
-    const employee = await EmployeeProfile.findOne({
-      user: new mongoose.Types.ObjectId(data.employeeId),
-      employmentStatus: EMPLOYMENT_STATUS.ACTIVE,
+    const userObjectId = new mongoose.Types.ObjectId(data.employeeId);
+
+    // 1. Check EmployeeProfile by user field OR by profile _id
+    let employee = await EmployeeProfile.findOne({
+      $or: [{ user: userObjectId }, { _id: userObjectId }],
     })
       .session(session ?? null)
       .lean();
 
+    // 2. If no EmployeeProfile found or status is not active, throw explicit error
     if (!employee) {
       throw new AppError(
-        "Active employee profile not found",
+        "Employee profile missing. Please create an HR employee record for this user.",
         404,
         "EMPLOYEE_NOT_FOUND",
+      );
+    }
+
+    if (employee.employmentStatus !== EMPLOYMENT_STATUS.ACTIVE) {
+      throw new AppError(
+        `Employee status is '${employee.employmentStatus}'. Must be 'active' to apply for leave.`,
+        400,
+        "EMPLOYEE_INACTIVE",
       );
     }
 
