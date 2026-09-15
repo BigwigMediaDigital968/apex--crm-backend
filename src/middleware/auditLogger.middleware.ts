@@ -20,7 +20,12 @@ export const trackActivity = (
     | "REPORT"
     | "SYSTEM",
   action: string,
-  getDescription?: (req: Request) => string,
+  // May return a Promise so descriptions can look up the human-readable
+  // name/email for an id (e.g. req.params.id) instead of logging the raw
+  // id — the request/response cycle has already finished by the time this
+  // runs (see res.on("finish") below), so the extra lookup adds no latency
+  // for the caller.
+  getDescription?: (req: Request) => string | Promise<string>,
 ) => {
   return (req: Request, res: Response, next: NextFunction) => {
     res.on("finish", () => {
@@ -31,17 +36,23 @@ export const trackActivity = (
         const userId = currentUser?._id || currentUser?.id;
         if (!userId) return;
 
-        logActivity({
-          module,
-          action,
-          description: getDescription
-            ? getDescription(req)
-            : `${action} on ${req.originalUrl}`,
-          performedBy: userId,
-          branch: currentUser?.branches?.[0],
-          ipAddress: req.ip,
-          metadata: { ip: req.ip, userAgent: req.get("user-agent") },
-        });
+        (async () => {
+          const description = getDescription
+            ? await getDescription(req)
+            : `${action} on ${req.originalUrl}`;
+
+          await logActivity({
+            module,
+            action,
+            description,
+            performedBy: userId,
+            branch: currentUser?.branches?.[0],
+            ipAddress: req.ip,
+            metadata: { ip: req.ip, userAgent: req.get("user-agent") },
+          });
+        })().catch((error) =>
+          console.error("[ACTIVITY_LOG_ERROR]: Failed to build description", error),
+        );
       }
     });
 
