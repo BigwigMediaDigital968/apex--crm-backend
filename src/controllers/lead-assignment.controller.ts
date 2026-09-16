@@ -149,9 +149,10 @@ export const assignLeadController = async (
       });
     }
 
-    const lead = await assignLead({
+    const { lead, branchId: resolvedBranchId } = await assignLead({
       leadId,
       employeeId: data.employeeId,
+      branchId: data.branchId,
       actorId: req.user.id,
     });
 
@@ -160,9 +161,10 @@ export const assignLeadController = async (
       action: "LEAD_ASSIGNED",
       entity: "Lead",
       entityId: lead._id.toString(),
-      branch: lead.branch?.toString(),
+      branch: resolvedBranchId,
       metadata: {
         assignedTo: data.employeeId,
+        branchId: data.branchId,
         assignedAt: lead.assignedAt,
       },
       ipAddress: req.ip,
@@ -198,6 +200,7 @@ export const bulkAssignLeadsController = async (
     const result = await assignLeadsBulk({
       leadIds: data.leadIds,
       employeeId: data.employeeId,
+      branchId: data.branchId,
       actorId: req.user.id,
     });
 
@@ -212,6 +215,7 @@ export const bulkAssignLeadsController = async (
       branch: undefined, // ✅ Pass undefined instead of invalid string "SYSTEM"
       metadata: {
         assignedTo: data.employeeId,
+        branchId: data.branchId,
         leadIds: data.leadIds,
         count: result.assignedCount,
       },

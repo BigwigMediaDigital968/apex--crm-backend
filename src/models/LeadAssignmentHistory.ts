@@ -7,7 +7,8 @@ export interface ILeadAssignmentHistory
   extends Document {
   lead: mongoose.Types.ObjectId;
 
-  assignedTo: mongoose.Types.ObjectId;
+  /** Absent for a branch-only assignment (no specific representative). */
+  assignedTo?: mongoose.Types.ObjectId;
 
   assignedBy: mongoose.Types.ObjectId;
 
@@ -35,7 +36,6 @@ const leadAssignmentHistorySchema =
         type:
           Schema.Types.ObjectId,
         ref: "User",
-        required: true,
         index: true,
       },
 

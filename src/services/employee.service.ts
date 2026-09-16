@@ -456,7 +456,7 @@ export const listEmployees = async (
   options: {
     page: number;
     limit: number;
-    branchId?: string;
+    branchId?: string | string[];
     reportingManager?: string; // Add to options object
     role?: string;
     status?: string;
@@ -472,9 +472,16 @@ export const listEmployees = async (
     };
   }
 
-  // 2. Head role specific branch filtering
+  // 2. Head role specific branch filtering — accepts either a single
+  // branch ID or several (comma-separated/array, per the validator).
   if (options.branchId && context.role === ROLES.HEAD) {
-    filter.branch = new Types.ObjectId(options.branchId);
+    const branchIds = Array.isArray(options.branchId)
+      ? options.branchId
+      : [options.branchId];
+    filter.branch =
+      branchIds.length === 1
+        ? new Types.ObjectId(branchIds[0])
+        : { $in: branchIds.map((id) => new Types.ObjectId(id)) };
   }
 
   // 3. Filter by reportingManager (Matches key added to Zod Schema)

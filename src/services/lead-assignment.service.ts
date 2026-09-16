@@ -3,6 +3,7 @@ import { LeadAssignmentHistory } from "../models/LeadAssignmentHistory.js";
 import { Lead } from "../models/Lead.js";
 import { User } from "../models/User.js";
 import { EmployeeProfile } from "../models/EmployeeProfile.js";
+import { Branch } from "../models/Branch.js";
 import { ROLES } from "../constants/roles.js";
 import { AppError } from "../utils/AppError.js";
 import { EMPLOYMENT_STATUS, EmploymentStatus } from "../constants/employee.js";
@@ -65,22 +66,94 @@ const resolveEmployeeProfile = async (employeeProfileId: string) => {
   return user;
 };
 
+/**
+ * Resolves which branch an assignment should land on: an explicit
+ * branchId (chosen by the assigner) always wins — this is what lets an
+ * assignment move a lead to a different branch — falling back to the
+ * target employee's own branch when no branchId was given.
+ */
+const resolveTargetBranchId = async ({
+  branchId,
+  targetUser,
+}: {
+  branchId?: string;
+  targetUser: Awaited<ReturnType<typeof resolveEmployeeProfile>> | null;
+}) => {
+  let targetBranchId = branchId;
+
+  if (!targetBranchId) {
+    if (!targetUser) {
+      // Unreachable: callers guarantee employeeId or branchId is present.
+      throw new AppError("A branch is required", 400, "BRANCH_REQUIRED");
+    }
+    if (targetUser.branches.length === 0) {
+      throw new AppError(
+        "This employee has no branch to assign the lead to",
+        400,
+        "EMPLOYEE_BRANCH_REQUIRED",
+      );
+    }
+    targetBranchId = targetUser.branches[0]!.toString();
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(targetBranchId)) {
+    throw new AppError("Invalid branch ID format", 400, "INVALID_BRANCH_ID");
+  }
+
+  const branch = await Branch.findById(targetBranchId).select("_id").lean();
+  if (!branch) {
+    throw new AppError("Branch not found", 404, "BRANCH_NOT_FOUND");
+  }
+
+  // The employee must belong to the branch the lead is landing on —
+  // otherwise the lead becomes permanently invisible to them, since the
+  // read-side access filter requires branch AND assignedTo to both match
+  // for the EMPLOYEE role.
+  if (targetUser) {
+    const employeeBelongsToBranch = targetUser.branches.some(
+      (b) => b.toString() === targetBranchId,
+    );
+    if (!employeeBelongsToBranch) {
+      throw new AppError(
+        "Employee does not belong to the selected branch",
+        403,
+        "CROSS_BRANCH_ASSIGNMENT",
+      );
+    }
+  }
+
+  return targetBranchId;
+};
+
 // Single Assignment Service
 export const assignLead = async ({
   leadId,
   employeeId,
+  branchId,
   actorId,
 }: {
   leadId: string;
-  employeeId: string;
+  employeeId?: string;
+  branchId?: string;
   actorId: string;
 }) => {
+  if (!employeeId && !branchId) {
+    throw new AppError(
+      "Either an employee or a branch is required to assign a lead",
+      400,
+      "ASSIGNMENT_TARGET_REQUIRED",
+    );
+  }
+
   if (!mongoose.Types.ObjectId.isValid(leadId)) {
     throw new AppError("Invalid lead ID", 400, "INVALID_LEAD_ID");
   }
 
-  // Resolve the EmployeeProfile ID to get the linked active User
-  const targetUser = await resolveEmployeeProfile(employeeId);
+  // Resolve the EmployeeProfile ID to get the linked active User. Absent
+  // for a branch-only assignment (no specific representative).
+  const targetUser = employeeId
+    ? await resolveEmployeeProfile(employeeId)
+    : null;
 
   const lead = await Lead.findOne({ _id: leadId, isDeleted: false });
   if (!lead) {
@@ -99,47 +172,17 @@ export const assignLead = async ({
 
   const isHead = actor.role === ROLES.HEAD;
 
-  // Branch is optional at creation (HEAD can leave a lead unassigned to any
-  // branch), but assignment always locks it in — an assigned lead has to
-  // belong to a branch, since the employee it's assigned to only ever
-  // belongs to one. Backfill it from the employee's own branch before the
-  // branch-match checks below, which then trivially pass for a lead that
-  // was branchless a moment ago.
-  if (!lead.branch) {
-    if (targetUser.branches.length === 0) {
-      throw new AppError(
-        "This employee has no branch to assign the lead to",
-        400,
-        "EMPLOYEE_BRANCH_REQUIRED",
-      );
-    }
-    lead.branch = targetUser.branches[0];
-  }
-
-  // The employee must belong to the lead's branch regardless of who is
-  // assigning — otherwise the lead becomes permanently invisible to them,
-  // since the read-side access filter requires branch AND assignedTo to
-  // both match for the EMPLOYEE role.
-  const employeeBelongsToBranch = targetUser.branches.some(
-    (branch) => branch.toString() === lead.branch!.toString(),
-  );
-  if (!employeeBelongsToBranch) {
-    throw new AppError(
-      "Employee does not belong to the lead's branch",
-      403,
-      "CROSS_BRANCH_ASSIGNMENT",
-    );
-  }
+  const targetBranchId = await resolveTargetBranchId({ branchId, targetUser });
 
   // Only non-HEAD actors need their own branch access checked — HEAD has
   // access to every branch.
   if (!isHead) {
     const actorHasBranchAccess = actor.branches.some(
-      (branch) => branch.toString() === lead.branch!.toString(),
+      (branch) => branch.toString() === targetBranchId,
     );
     if (!actorHasBranchAccess) {
       throw new AppError(
-        "You do not have access to this lead's branch",
+        "You do not have access to this branch",
         403,
         "BRANCH_ACCESS_DENIED",
       );
@@ -149,35 +192,60 @@ export const assignLead = async ({
   const previousAssignee = lead.assignedTo || undefined;
   const now = new Date();
 
-  // Assign using the User ID linked to the EmployeeProfile
-  lead.assignedTo = targetUser._id;
+  lead.branch = new mongoose.Types.ObjectId(targetBranchId);
   lead.assignedBy = new mongoose.Types.ObjectId(actorId);
   lead.assignedAt = now;
+  // Assign using the User ID linked to the EmployeeProfile, or clear any
+  // existing representative for a branch-only assignment.
+  lead.assignedTo = targetUser ? targetUser._id : undefined;
 
   await lead.save();
 
   await LeadAssignmentHistory.create({
     lead: lead._id,
-    assignedTo: targetUser._id,
+    assignedTo: targetUser ? targetUser._id : undefined,
     assignedBy: new mongoose.Types.ObjectId(actorId),
     branch: lead.branch,
     previousAssignee,
     assignedAt: now,
   });
 
-  return lead;
+  // The controller hands this document straight back to the client, which
+  // replaces its cached lead detail with it — populate the same refs the
+  // GET /leads/:id route does, or branch/assignedTo/createdBy would regress
+  // to bare ObjectIds and read back as "Unassigned" until the next refetch.
+  await lead.populate([
+    { path: "branch", select: "name code" },
+    { path: "assignedTo", select: "name email role" },
+    { path: "createdBy", select: "name email role" },
+  ]);
+
+  // Returned separately from `lead` since `lead.branch` is now a populated
+  // document, not the bare ObjectId string callers (e.g. the audit log)
+  // need.
+  return { lead, branchId: targetBranchId };
 };
 
 // Bulk Assignment Service
 export const assignLeadsBulk = async ({
   leadIds,
   employeeId,
+  branchId,
   actorId,
 }: {
   leadIds: string[];
-  employeeId: string;
+  employeeId?: string;
+  branchId?: string;
   actorId: string;
 }) => {
+  if (!employeeId && !branchId) {
+    throw new AppError(
+      "Either an employee or a branch is required to assign leads",
+      400,
+      "ASSIGNMENT_TARGET_REQUIRED",
+    );
+  }
+
   if (!Array.isArray(leadIds) || leadIds.length === 0) {
     throw new AppError(
       "Lead IDs must be a non-empty array",
@@ -197,8 +265,11 @@ export const assignLeadsBulk = async ({
     );
   }
 
-  // Resolve the EmployeeProfile ID to get the linked active User
-  const targetUser = await resolveEmployeeProfile(employeeId);
+  // Resolve the EmployeeProfile ID to get the linked active User. Absent
+  // for a branch-only assignment (no specific representative).
+  const targetUser = employeeId
+    ? await resolveEmployeeProfile(employeeId)
+    : null;
 
   const actor = await User.findById(actorId)
     .select("_id role branches isActive")
@@ -213,6 +284,21 @@ export const assignLeadsBulk = async ({
 
   const isHead = actor.role === ROLES.HEAD;
 
+  const targetBranchId = await resolveTargetBranchId({ branchId, targetUser });
+
+  if (!isHead) {
+    const actorHasAccess = actor.branches.some(
+      (b) => b.toString() === targetBranchId,
+    );
+    if (!actorHasAccess) {
+      throw new AppError(
+        "You do not have access to this branch",
+        403,
+        "BRANCH_ACCESS_DENIED",
+      );
+    }
+  }
+
   const leads = await Lead.find({
     _id: { $in: validLeadIds },
     isDeleted: false,
@@ -226,71 +312,41 @@ export const assignLeadsBulk = async ({
   }
 
   const now = new Date();
+  const targetBranchObjectId = new mongoose.Types.ObjectId(targetBranchId);
   const bulkOps = [];
   const historyDocs = [];
 
   for (const lead of leads) {
-    // See assignLead above: a branchless lead (HEAD-created, never
-    // assigned) gets locked to the employee's own branch right here.
-    if (!lead.branch) {
-      if (targetUser.branches.length === 0) {
-        throw new AppError(
-          `Employee has no branch to assign lead ID: ${lead._id} to`,
-          400,
-          "EMPLOYEE_BRANCH_REQUIRED",
-        );
-      }
-      lead.branch = targetUser.branches[0];
-    }
+    const setFields: Record<string, unknown> = {
+      assignedBy: new mongoose.Types.ObjectId(actorId),
+      assignedAt: now,
+      branch: targetBranchObjectId,
+    };
+    const unsetFields: Record<string, "" | 1 | true> = {};
 
-    // The employee must belong to each lead's branch regardless of who is
-    // assigning — see assignLead above for why.
-    const employeeBelongs = targetUser.branches.some(
-      (b) => b.toString() === lead.branch!.toString(),
-    );
-    if (!employeeBelongs) {
-      throw new AppError(
-        `Cross-branch assignment denied for lead ID: ${lead._id}`,
-        403,
-        "CROSS_BRANCH_ASSIGNMENT",
-      );
-    }
-
-    if (!isHead) {
-      const actorHasAccess = actor.branches.some(
-        (b) => b.toString() === lead.branch!.toString(),
-      );
-
-      if (!actorHasAccess) {
-        throw new AppError(
-          `Cross-branch assignment denied for lead ID: ${lead._id}`,
-          403,
-          "BRANCH_ACCESS_DENIED",
-        );
-      }
+    if (targetUser) {
+      setFields.assignedTo = targetUser._id; // Assign to the linked User ID
+    } else {
+      unsetFields.assignedTo = "";
     }
 
     bulkOps.push({
       updateOne: {
         filter: { _id: lead._id },
         update: {
-          $set: {
-            assignedTo: targetUser._id, // Assign to the linked User ID
-            assignedBy: new mongoose.Types.ObjectId(actorId),
-            assignedAt: now,
-            // Persists the backfill above — bulkWrite doesn't pick up
-            // in-memory mutations on `lead` on its own.
-            branch: lead.branch,
-          },
+          $set: setFields,
+          ...(Object.keys(unsetFields).length
+            ? { $unset: unsetFields }
+            : {}),
         },
       },
     });
 
     historyDocs.push({
       lead: lead._id,
-      assignedTo: targetUser._id,
+      assignedTo: targetUser ? targetUser._id : undefined,
       assignedBy: new mongoose.Types.ObjectId(actorId),
-      branch: lead.branch,
+      branch: targetBranchObjectId,
       previousAssignee: lead.assignedTo || undefined,
       assignedAt: now,
     });
