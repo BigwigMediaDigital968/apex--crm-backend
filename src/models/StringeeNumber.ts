@@ -6,6 +6,8 @@ export interface IStringeeNumber extends Document {
   branch?: Types.ObjectId; // Scoped to branch (required for Admin filtering)
   assignedTo?: Types.ObjectId; // User (Employee) assigned to this number
   assignedBy?: Types.ObjectId;
+  stringeeUserId?: string; // Added: Stringee internal user ID or extension ID
+  stringeePassword?: string; // Added: SIP/Stringee credentials password
   assignedAt?: Date;
   isActive: boolean;
   createdBy: Types.ObjectId;
@@ -42,6 +44,14 @@ const stringeeNumberSchema = new Schema<IStringeeNumber>(
     assignedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
+    },
+    stringeeUserId: {
+      type: String,
+      trim: true,
+    },
+    stringeePassword: {
+      type: String,
+      trim: true,
     },
     assignedAt: {
       type: Date,
