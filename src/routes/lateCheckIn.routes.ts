@@ -128,6 +128,7 @@ import {
   reviewLateCheckIn,
 } from "../services/lateCheckIn.service.js";
 import { ROLE_PERMISSIONS } from "../permissions/rolePermissions.js";
+import { getBranchFilter } from "../utils/branchFilter.js";
 import { verifyLateCheckInToken } from "../utils/jwt.js";
 
 const router = Router();
@@ -220,6 +221,13 @@ router.get("/", authenticate, async (req, res, next) => {
 
     if (!canApprove) {
       queryFilter.employee = user.id;
+    } else {
+      // Approvers are scoped to their own branches — a manager/admin must not
+      // see (or even read the reason of) a request raised in a branch they are
+      // not assigned to. reviewLateCheckIn() already refuses cross-branch
+      // approvals; without this the details still leaked through the list.
+      // getBranchFilter() returns {} for HEAD, who is global by design.
+      Object.assign(queryFilter, getBranchFilter(user));
     }
 
     const requests = await LateCheckInRequest.find(queryFilter)
