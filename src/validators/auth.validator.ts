@@ -25,3 +25,13 @@ export const changePasswordSchema = z
     newPassword: z.string().min(8).max(128),
   })
   .strict();
+
+/**
+ * Admin/Head reset of someone else's password. There is no current password to
+ * verify here — the actor's USER_UPDATE permission is the authorization.
+ */
+export const resetPasswordSchema = z
+  .object({
+    newPassword: z.string().min(8).max(128),
+  })
+  .strict();

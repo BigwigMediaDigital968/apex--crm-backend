@@ -1,65 +1,3 @@
-// import { Router } from "express";
-
-// import {
-//   loginController,
-//   logoutController,
-//   getMeController,
-//   refreshController,
-// } from "../controllers/auth.controller.js";
-
-// import {
-//   authenticate,
-// } from "../middleware/auth.middleware.js";
-
-// import {
-//   authorize,
-// } from "../middleware/authorize.middleware.js";
-
-// import {
-//   PERMISSIONS,
-// } from "../constants/permissions.js";
-
-// const router =
-//   Router();
-
-// router.post(
-//   "/login",
-//   loginController,
-// );
-
-// router.post(
-//   "/refresh",
-//   refreshController,
-// );
-
-// router.post(
-//   "/logout",
-//   authenticate,
-//   logoutController,
-// );
-
-// router.get(
-//   "/me",
-//   authenticate,
-//   getMeController,
-// );
-
-// router.get(
-//   "/test-branch-permission",
-//   authenticate,
-//   authorize(
-//     PERMISSIONS.BRANCH_CREATE,
-//   ),
-//   (_req, res) => {
-//     res.json({
-//       success: true,
-//       message:
-//         "You have branch creation permission",
-//     });
-//   },
-// );
-
-// export default router;
 
 import { Router } from "express";
 import {
@@ -69,6 +7,7 @@ import {
   refreshController,
   updateMeController,
   changeMyPasswordController,
+  changeEmployeePasswordController,
 } from "../controllers/auth.controller.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/authorize.middleware.js";
@@ -99,6 +38,19 @@ router.post(
   }),
   logoutController,
 );
+
+// 5. Reset Another User's Password (Head / Admin — gated on USER_UPDATE)
+router.patch(
+  "/update-password/:id",
+  authenticate,
+  authorize(PERMISSIONS.USER_UPDATE),
+  trackActivity("USER", "PASSWORD_CHANGED", (req) => {
+    const user = (req as any).user;
+    return `${user?.name || user?.email || "User"} reset the password of user ${req.params.id}`;
+  }),
+  changeEmployeePasswordController,
+);
+
 
 // Read-only / Test Routes (No tracking needed)
 router.get("/me", authenticate, getMeController);

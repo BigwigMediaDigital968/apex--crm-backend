@@ -116,3 +116,20 @@ export const changeOwnPassword = async (
 
   await user.save();
 };
+
+export const changeEmployeePassword = async (
+  empoyeeId: string,
+  newPassword: string,
+) => {
+  const user = (await User.findById(empoyeeId)
+    .select("+password")
+    .exec()) as IUser | null;
+
+  if (!user) {
+    throw new AppError("Emploee account not found", 404, "USER_NOT_FOUND");
+  }
+
+  user.password = await hashPassword(newPassword);
+
+  await user.save();
+};

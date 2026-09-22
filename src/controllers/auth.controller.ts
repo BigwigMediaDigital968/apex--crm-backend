@@ -231,11 +231,13 @@ import {
   loginUser,
   updateOwnProfile,
   changeOwnPassword,
+  changeEmployeePassword,
 } from "../services/auth.service.js";
 import {
   loginSchema,
   updateMeSchema,
   changePasswordSchema,
+  resetPasswordSchema,
 } from "../validators/auth.validator.js";
 import {
   findValidSession,
@@ -249,6 +251,7 @@ import { AppError } from "../utils/AppError.js";
 import { auditRequest } from "../utils/audit.js";
 import { AUDIT_ACTIONS } from "../constants/auditActions.js";
 import { AUDIT_ENTITIES } from "../constants/auditEntities.js";
+import { getRequiredParam } from "../utils/requestParams.js";
 
 // export const loginController = async (
 //   req: Request,
@@ -590,6 +593,37 @@ export const changeMyPasswordController = async (
       action: AUDIT_ACTIONS.PASSWORD_CHANGED,
       entity: AUDIT_ENTITIES.AUTH,
       entityId: req.user.id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changeEmployeePasswordController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user?.id) {
+      throw new AppError("Authentication required.", 401, "UNAUTHORIZED");
+    }
+
+    const data = resetPasswordSchema.parse(req.body || {});
+    const empoyeeId =  getRequiredParam(req, "id")
+
+    await changeEmployeePassword(empoyeeId, data.newPassword);
+
+    await auditRequest({
+      req,
+      action: AUDIT_ACTIONS.PASSWORD_CHANGED,
+      entity: AUDIT_ENTITIES.AUTH,
+      entityId: empoyeeId,
     });
 
     return res.status(200).json({
