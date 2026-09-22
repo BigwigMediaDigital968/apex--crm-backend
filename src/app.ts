@@ -64,8 +64,8 @@ app.use(cookieParser());
 app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
 
 const globalRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
+  windowMs: 10 * 60 * 1000,
+  limit: 600,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: {

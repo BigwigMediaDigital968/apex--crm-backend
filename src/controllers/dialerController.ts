@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { Types } from "mongoose";
 import { generateStringeeToken } from "../utils/stringeeToken.js";
 import { CallLog } from "../models/CallLog.js";
 import { Lead } from "../models/Lead.js";
@@ -538,18 +539,28 @@ export const getCallLogs = async (req: Request, res: Response) => {
     // Dynamic Filter Construction
     const filter: any = {};
 
+    // find() casts id strings to ObjectIds for us, but aggregate() does not —
+    // and the summary below runs the same filter through an aggregation, so
+    // the ids have to be cast up front or the $match silently returns nothing.
+    // Anything that isn't a valid id is passed through untouched so the
+    // existing CastError behaviour is preserved.
+    const toObjectId = (value: unknown): unknown => {
+      const raw = String(value);
+      return Types.ObjectId.isValid(raw) ? new Types.ObjectId(raw) : value;
+    };
+
     // 1. Role-based scoping: Non-head roles can only view their own calls
     if (req.user?.role !== "head") {
-      filter.caller = req.user?.id;
+      filter.caller = toObjectId(req.user?.id);
     } else {
       // Head roles can explicitly filter by caller if passed in query
-      if (userId) filter.caller = userId;
-      if (branchId) filter.branch = branchId;
+      if (userId) filter.caller = toObjectId(userId);
+      if (branchId) filter.branch = toObjectId(branchId);
     }
 
     // 2. Query parameters filters
     if (status) filter.callStatus = status;
-    if (leadId) filter.lead = leadId;
+    if (leadId) filter.lead = toObjectId(leadId);
 
     // 3. Date Range Filtering (startDate & endDate)
     if (startDate || endDate) {
@@ -594,7 +605,10 @@ export const getCallLogs = async (req: Request, res: Response) => {
       ];
     }
 
-    const [logs, total] = await Promise.all([
+    // Summary metrics are aggregated over the *whole* filtered result set, not
+    // just the current page, so the KPI cards answer "what does this filter
+    // select?" rather than "what happens to be on screen right now?".
+    const [logs, total, summary] = await Promise.all([
       CallLog.find(filter)
         .populate("lead", "name phone email company avatar")
         .populate("caller", "name email avatar")
@@ -604,11 +618,47 @@ export const getCallLogs = async (req: Request, res: Response) => {
         .limit(limit)
         .lean(),
       CallLog.countDocuments(filter),
+      CallLog.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            totalCalls: { $sum: 1 },
+            totalSeconds: { $sum: { $ifNull: ["$duration", 0] } },
+            answeredCalls: {
+              $sum: {
+                $cond: [
+                  { $in: ["$callStatus", ["answered", "ended"]] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            missedCalls: {
+              $sum: {
+                $cond: [
+                  { $in: ["$callStatus", ["missed", "rejected"]] },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
     ]);
+
+    const stats = {
+      totalCalls: summary[0]?.totalCalls ?? 0,
+      totalSeconds: summary[0]?.totalSeconds ?? 0,
+      answeredCalls: summary[0]?.answeredCalls ?? 0,
+      missedCalls: summary[0]?.missedCalls ?? 0,
+    };
 
     return res.status(200).json({
       success: true,
       data: logs,
+      stats,
       pagination: {
         total,
         page,
