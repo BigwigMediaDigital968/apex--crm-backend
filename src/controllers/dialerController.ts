@@ -625,6 +625,7 @@ import { Lead } from "../models/Lead.js";
 import { createLeadActivity } from "../services/lead.service.js";
 import { User } from "../models/User.js";
 import { StringeeNumber } from "../models/StringeeNumber.js";
+import axios from "axios";
 
 export const getStringeeTokenController = async (
   req: Request,
@@ -1118,5 +1119,56 @@ export const getCallLogById = async (req: Request, res: Response) => {
     return res.status(200).json({ success: true, data: log });
   } catch (error: any) {
     return res.status(500).json({ message: error.message });
+  }
+};
+
+export const proxyRecordingAudio = async (req: Request, res: Response) => {
+  try {
+    const { recordingUrl } = req.query;
+
+    if (!recordingUrl || typeof recordingUrl !== "string") {
+      return res
+        .status(400)
+        .json({ message: "recordingUrl query parameter is required" });
+    }
+
+    if (!recordingUrl.includes("stringee.com")) {
+      return res.status(403).json({ message: "Invalid recording URL domain" });
+    }
+
+    // Generate server-side Stringee admin JWT token
+    const stringeeToken = generateStringeeToken("server_admin");
+
+    const response = await axios({
+      method: "get",
+      url: recordingUrl,
+      headers: {
+        "X-STRINGEE-AUTH": stringeeToken,
+      },
+      responseType: "stream",
+    });
+
+    const contentType = response.headers["content-type"];
+    const contentLength = response.headers["content-length"];
+
+    if (contentType) {
+      res.setHeader("Content-Type", String(contentType));
+    } else {
+      res.setHeader("Content-Type", "audio/wav");
+    }
+
+    if (contentLength) {
+      res.setHeader("Content-Length", String(contentLength));
+    }
+
+    return response.data.pipe(res);
+  } catch (error: any) {
+    console.error(
+      "[Audio Proxy Error]:",
+      error?.response?.data || error.message,
+    );
+    return res
+      .status(500)
+      .json({ message: "Failed to stream recording audio" });
   }
 };

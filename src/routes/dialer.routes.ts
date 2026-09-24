@@ -10,6 +10,7 @@ import {
   getLeadCallHistoryController,
   getCallLogs,
   getCallLogById,
+  proxyRecordingAudio,
 } from "../controllers/dialerController.js";
 
 const router = Router();
@@ -80,5 +81,7 @@ router.post(
   ),
   handleCallEventsWebhook,
 );
+
+router.get("/recording-proxy", proxyRecordingAudio);
 
 export default router;
