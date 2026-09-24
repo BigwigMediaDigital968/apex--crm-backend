@@ -619,7 +619,10 @@
 
 import { Request, Response } from "express";
 import { Types } from "mongoose";
-import { generateStringeeToken } from "../utils/stringeeToken.js";
+import {
+  generateStringeeToken,
+  generateStringeeRestToken,
+} from "../utils/stringeeToken.js";
 import { CallLog } from "../models/CallLog.js";
 import { Lead } from "../models/Lead.js";
 import { createLeadActivity } from "../services/lead.service.js";
@@ -1132,40 +1135,71 @@ export const proxyRecordingAudio = async (req: Request, res: Response) => {
         .json({ message: "recordingUrl query parameter is required" });
     }
 
-    if (!recordingUrl.includes("stringee.com")) {
+    // 1. Ensure target URL is valid and targets Stringee
+    let cleanUrl = recordingUrl.trim();
+    if (cleanUrl.startsWith("http://")) {
+      cleanUrl = cleanUrl.replace("http://", "https://");
+    }
+
+    if (!cleanUrl.includes("stringee.com")) {
       return res.status(403).json({ message: "Invalid recording URL domain" });
     }
 
-    // Generate server-side Stringee admin JWT token
-    const stringeeToken = generateStringeeToken("server_admin");
+    // 2. Generate REST API Token
+    const stringeeToken = generateStringeeRestToken();
 
+    // 3. Request audio stream from Stringee using `X-STRINGEE-AUTH`
     const response = await axios({
       method: "get",
-      url: recordingUrl,
+      url: cleanUrl,
       headers: {
-        "X-STRINGEE-AUTH": stringeeToken,
+        "X-STRINGEE-AUTH": stringeeToken, // <--- Correct Stringee Auth Header
+        "Accept-Encoding": "identity",
       },
       responseType: "stream",
+      decompress: false,
+      validateStatus: () => true, // Capture response statuses
     });
 
-    const contentType = response.headers["content-type"];
-    const contentLength = response.headers["content-length"];
+    const rawContentType = response.headers["content-type"];
+    const contentType =
+      typeof rawContentType === "string" ? rawContentType : "audio/mpeg";
 
-    if (contentType) {
-      res.setHeader("Content-Type", String(contentType));
-    } else {
-      res.setHeader("Content-Type", "audio/wav");
+    // 4. Handle non-200 responses / JSON error responses from Stringee
+    if (contentType.includes("application/json") || response.status !== 200) {
+      let rawData = "";
+      response.data.on(
+        "data",
+        (chunk: Buffer) => (rawData += chunk.toString())
+      );
+      response.data.on("end", () => {
+        console.error(`[Stringee Audio Stream Error ${response.status}]:`, rawData);
+        return res.status(response.status || 401).json({
+          message: "Stringee audio access rejected",
+          error: rawData,
+        });
+      });
+      return;
     }
 
-    if (contentLength) {
-      res.setHeader("Content-Length", String(contentLength));
+    // 5. Send CORS & Streaming headers to the browser
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Type", contentType);
+
+    if (response.headers["content-length"]) {
+      res.setHeader(
+        "Content-Length",
+        String(response.headers["content-length"])
+      );
     }
 
     return response.data.pipe(res);
   } catch (error: any) {
     console.error(
       "[Audio Proxy Error]:",
-      error?.response?.data || error.message,
+      error?.response?.data || error.message
     );
     return res
       .status(500)
