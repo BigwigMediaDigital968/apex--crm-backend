@@ -24,6 +24,8 @@ export interface IRevenue extends Document {
   verifiedAt?: Date;
   notes?: string;
   createdBy: Types.ObjectId;
+  lastEditedBy?: Types.ObjectId;
+  lastEditedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -102,6 +104,13 @@ const revenueSchema = new Schema<IRevenue>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+    },
+    lastEditedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    lastEditedAt: {
+      type: Date,
     },
   },
   {

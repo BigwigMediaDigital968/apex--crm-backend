@@ -151,6 +151,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Revenue
     PERMISSIONS.REVENUE_CREATE,
+    PERMISSIONS.REVENUE_UPDATE,
     PERMISSIONS.REVENUE_MANAGE,
     PERMISSIONS.REVENUE_VIEW,
 
@@ -265,6 +266,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Revenue
     PERMISSIONS.REVENUE_VIEW,
+    PERMISSIONS.REVENUE_UPDATE,
     PERMISSIONS.REVENUE_MANAGE,
 
     // Reports
@@ -354,6 +356,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Own revenue
     PERMISSIONS.REVENUE_CREATE,
+    PERMISSIONS.REVENUE_UPDATE,
     PERMISSIONS.REVENUE_VIEW,
 
     // Own reports

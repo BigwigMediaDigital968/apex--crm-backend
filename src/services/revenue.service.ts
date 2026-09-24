@@ -5,6 +5,8 @@ import { Revenue, REVENUE_STATUS } from "../models/Revenue.js";
 import { User } from "../models/User.js";
 import { EmployeeProfile } from "../models/EmployeeProfile.js";
 import { ROLES } from "../constants/roles.js";
+import { PERMISSIONS } from "../constants/permissions.js";
+import { ROLE_PERMISSIONS } from "../permissions/rolePermissions.js";
 import type { AuthenticatedUser } from "../types/auth.js";
 import { AppError } from "../utils/AppError.js";
 import { Lead } from "../models/Lead.js";
@@ -28,6 +30,22 @@ export const updateRevenueStatusSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
+// Editable fields only — employee, branch, lead and status never change via edit.
+// An empty string on an optional text field clears it.
+export const updateRevenueEntrySchema = z
+  .object({
+    date: z.string().datetime({ offset: true }).optional(),
+    amount: z.number().positive().optional(),
+    source: z.string().trim().min(1).max(100).optional(),
+    clientName: z.string().trim().min(1).max(150).optional(),
+    clientContact: z.string().trim().max(50).optional(),
+    reference: z.string().trim().max(100).optional(),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .refine((d) => Object.values(d).some((v) => v !== undefined), {
+    message: "At least one field is required",
+  });
+
 export const revenueQuerySchema = z.object({
   targetUserId: z.string().optional(),
   employeeId: z.string().optional(),
@@ -43,9 +61,14 @@ export const revenueQuerySchema = z.object({
   startDate: z.string().datetime({ offset: true }).optional(),
   endDate: z.string().datetime({ offset: true }).optional(),
   viewMode: z
-    .enum(["INDIVIDUAL", "TEAM", "BRANCH", "LEAD"])
+    .enum(["ALL", "INDIVIDUAL", "TEAM", "BRANCH", "LEAD"])
     .default("INDIVIDUAL"),
 });
+
+// Helper: Verifying / rejecting (and editing an already-reviewed entry) is
+// governed purely by the role's REVENUE_MANAGE permission.
+const canManageRevenue = (requestor: AuthenticatedUser) =>
+  (ROLE_PERMISSIONS[requestor.role] ?? []).includes(PERMISSIONS.REVENUE_MANAGE);
 
 // Helper: Resolve Employee User ID (Supports User ID or EmployeeProfile lookup)
 const resolveUserId = async (id: string): Promise<Types.ObjectId> => {
@@ -222,9 +245,45 @@ export const getRevenueReport = async (
   }
 
   let targetUserIds: Types.ObjectId[] = [];
+  // ALL mode for ADMIN/HEAD scopes by branch rather than by a user list
+  let scopeByBranch = false;
+  let branchScope: unknown;
   let scopeInfo: Record<string, unknown> = { viewMode };
 
-  if (viewMode === "INDIVIDUAL") {
+  if (viewMode === "ALL") {
+    // Everything the requestor is allowed to see, based on their role
+    if (branchId && !Types.ObjectId.isValid(branchId)) {
+      throw new AppError("Invalid Branch ID format", 400, "INVALID_BRANCH_ID");
+    }
+
+    if (requestor.role === ROLES.HEAD) {
+      scopeByBranch = true;
+      if (branchId) branchScope = new Types.ObjectId(branchId);
+    } else if (requestor.role === ROLES.ADMIN) {
+      scopeByBranch = true;
+      if (branchId && !requestor.branches.includes(branchId)) {
+        throw new AppError(
+          "Access denied to unassigned branch",
+          403,
+          "ACCESS_DENIED",
+        );
+      }
+      branchScope = branchId
+        ? new Types.ObjectId(branchId)
+        : { $in: requestor.branches.map((b) => new Types.ObjectId(b)) };
+    } else if (requestor.role === ROLES.MANAGER) {
+      const teamProfiles = await EmployeeProfile.find({
+        reportingManager: new Types.ObjectId(requestor.id),
+      })
+        .select("user")
+        .lean();
+      targetUserIds = teamProfiles.map((p) => p.user);
+      targetUserIds.push(new Types.ObjectId(requestor.id));
+    } else {
+      targetUserIds = [new Types.ObjectId(requestor.id)];
+    }
+    scopeInfo.role = requestor.role;
+  } else if (viewMode === "INDIVIDUAL") {
     const rawId = targetUserId || employeeId || requestor.id;
     const resolvedId = await resolveUserId(rawId);
 
@@ -318,9 +377,13 @@ export const getRevenueReport = async (
   }
 
   // Construct Match Query
-  const matchQuery: Record<string, unknown> = {
-    employee: { $in: targetUserIds },
-  };
+  const matchQuery: Record<string, unknown> = {};
+  if (scopeByBranch) {
+    // HEAD without a branch filter leaves branchScope unset — every branch
+    if (branchScope !== undefined) matchQuery.branch = branchScope;
+  } else {
+    matchQuery.employee = { $in: targetUserIds };
+  }
 
   if (status) matchQuery.status = status;
   if (startDate || endDate) {
@@ -347,6 +410,8 @@ export const getRevenueReport = async (
     .populate("employee", "name email")
     .populate("branch", "name code")
     .populate("lead", "name status")
+    .populate("verifiedBy", "name")
+    .populate("lastEditedBy", "name")
     .sort({ date: -1 })
     .lean();
 
@@ -361,19 +426,15 @@ export const getRevenueReport = async (
   };
 };
 
-// 3. Verify / Reject Revenue Entry (Admin & Head Only)
+// 3. Verify / Reject Revenue Entry (any role with REVENUE_MANAGE)
 export const updateRevenueStatus = async (
   requestor: AuthenticatedUser,
   revenueId: string,
   rawData: unknown,
 ) => {
-  if (
-    requestor.role !== ROLES.ADMIN &&
-    requestor.role !== ROLES.HEAD &&
-    requestor.role !== ROLES.MANAGER
-  ) {
+  if (!canManageRevenue(requestor)) {
     throw new AppError(
-      "Only Admins and Head can verify or reject revenue",
+      "You do not have permission to verify or reject revenue",
       403,
       "ACCESS_DENIED",
     );
@@ -384,26 +445,75 @@ export const updateRevenueStatus = async (
     throw new AppError("Invalid status or payload", 400, "INVALID_INPUT");
   }
 
+  if (!Types.ObjectId.isValid(revenueId)) {
+    throw new AppError("Invalid revenue ID format", 400, "INVALID_ID");
+  }
+
   const revenue = await Revenue.findById(revenueId);
   if (!revenue) {
     throw new AppError("Revenue record not found", 404, "NOT_FOUND");
-  }
-
-  if (
-    requestor.role === ROLES.ADMIN &&
-    !requestor.branches.includes(revenue.branch.toString())
-  ) {
-    throw new AppError(
-      "Cannot manage revenue outside assigned branches",
-      403,
-      "ACCESS_DENIED",
-    );
   }
 
   revenue.status = result.data.status;
   revenue.verifiedBy = new Types.ObjectId(requestor.id);
   revenue.verifiedAt = new Date();
   if (result.data.notes) revenue.notes = result.data.notes;
+
+  await revenue.save();
+  return revenue;
+};
+
+// 4. Edit Revenue Entry
+// The employee can edit their own entry while it is PENDING. Any other edit —
+// someone else's entry, or one already verified/rejected — needs REVENUE_MANAGE.
+export const updateRevenueEntry = async (
+  requestor: AuthenticatedUser,
+  revenueId: string,
+  rawData: unknown,
+) => {
+  if (!Types.ObjectId.isValid(revenueId)) {
+    throw new AppError("Invalid revenue ID format", 400, "INVALID_ID");
+  }
+
+  const result = updateRevenueEntrySchema.safeParse(rawData);
+  if (!result.success) {
+    const errs = result.error.issues
+      .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
+      .join(", ");
+    throw new AppError(`Invalid revenue data: ${errs}`, 400, "INVALID_INPUT");
+  }
+
+  const revenue = await Revenue.findById(revenueId);
+  if (!revenue) {
+    throw new AppError("Revenue record not found", 404, "NOT_FOUND");
+  }
+
+  const isOwner = revenue.employee.toString() === requestor.id;
+  const isPending = revenue.status === REVENUE_STATUS.PENDING;
+
+  if (!(isOwner && isPending) && !canManageRevenue(requestor)) {
+    throw new AppError(
+      isOwner
+        ? "This entry has already been reviewed. Ask your manager to make changes."
+        : "You can only edit your own revenue entries",
+      403,
+      "ACCESS_DENIED",
+    );
+  }
+
+  const { date, amount, source, clientName, clientContact, reference, notes } =
+    result.data;
+
+  if (date !== undefined) revenue.date = new Date(date);
+  if (amount !== undefined) revenue.amount = amount;
+  if (source !== undefined) revenue.source = source;
+  if (clientName !== undefined) revenue.clientName = clientName;
+  if (clientContact !== undefined) revenue.clientContact = clientContact || undefined;
+  if (reference !== undefined) revenue.reference = reference || undefined;
+  if (notes !== undefined) revenue.notes = notes || undefined;
+
+  revenue.lastEditedBy = new Types.ObjectId(requestor.id);
+  revenue.lastEditedAt = new Date();
 
   await revenue.save();
   return revenue;

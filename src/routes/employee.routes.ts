@@ -54,6 +54,8 @@
 // export default router;
 
 import { Router } from "express";
+import { Types } from "mongoose";
+import { EmployeeProfile } from "../models/EmployeeProfile.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/authorize.middleware.js";
 import { trackActivity } from "../middleware/auditLogger.middleware.js";
@@ -89,11 +91,24 @@ router.patch(
   "/:id",
   authenticate,
   authorize(PERMISSIONS.EMPLOYEE_UPDATE),
-  trackActivity(
-    "EMPLOYEE",
-    "UPDATED",
-    (req) => `Updated employee profile for ID: ${req.params.id}`,
-  ),
+  trackActivity("EMPLOYEE", "UPDATED", async (req) => {
+    // :id may be a profile ID or a user ID (the service accepts both)
+    const id = String(req.params.id);
+    const profile = Types.ObjectId.isValid(id)
+      ? await EmployeeProfile.findOne({
+          $or: [{ _id: new Types.ObjectId(id) }, { user: new Types.ObjectId(id) }],
+        })
+          .select("user")
+          .populate<{ user: { name: string; email: string } | null }>(
+            "user",
+            "name email",
+          )
+          .lean()
+      : null;
+    return profile?.user
+      ? `Updated employee profile for ${profile.user.name} (${profile.user.email})`
+      : `Updated employee profile for ID: ${id}`;
+  }),
   updateEmployeeController,
 );
 
