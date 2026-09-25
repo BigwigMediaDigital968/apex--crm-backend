@@ -66,7 +66,7 @@ export const generateStringeeRestToken = (): string => {
     jti: `${apiKeySid}-${now}`,
     iss: apiKeySid,
     exp: exp,
-    rest_api: 1, // Required claim for Stringee REST API
+    rest_api: true, // Required claim for Stringee REST API
   };
 
   return jwt.sign(payload, apiKeySecret, {
@@ -75,7 +75,7 @@ export const generateStringeeRestToken = (): string => {
       alg: "HS256",
       typ: "JWT",
       cty: "stringee-api;v=1",
-      kid: apiKeySid,
+      // kid: apiKeySid,
     },
   });
 };
