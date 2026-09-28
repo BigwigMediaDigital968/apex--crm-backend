@@ -40,9 +40,7 @@ export const updateTaskStatusSchema = z.object({
 
 export const updateTaskSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
-
   description: z.string().trim().max(5000).optional(),
-
   priority: z
     .enum([
       TASK_PRIORITY.LOW,
@@ -51,7 +49,6 @@ export const updateTaskSchema = z.object({
       TASK_PRIORITY.URGENT,
     ])
     .optional(),
-
   status: z
     .enum([
       TASK_STATUS.TODO,
@@ -61,22 +58,16 @@ export const updateTaskSchema = z.object({
       TASK_STATUS.CANCELLED,
     ])
     .optional(),
-
   dueDate: z.string().datetime().optional(),
-
   remarks: z.string().trim().max(2000).optional(),
-
   completedAt: z.string().datetime().nullable().optional(),
-
   assignedTo: z
     .string()
     .regex(/^[0-9a-fA-F]{24}$/)
     .optional(),
-
   branch: z
     .string()
     .regex(/^[0-9a-fA-F]{24}$/)
     .optional(),
-
   leads: z.array(z.string()).nullable().optional(),
 });

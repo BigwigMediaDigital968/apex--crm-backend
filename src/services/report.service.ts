@@ -11,6 +11,9 @@ import Workbook from "exceljs";
 export interface ReportFilterQuery {
   startDate?: string;
   endDate?: string;
+  perfStartDate?: string;
+  perfEndDate?: string;
+  performancePeriod?: "Daily" | "Weekly" | "Monthly";
   branchId?: string;
   employeeId?: string;
   module?: "LEAD" | "ATTENDANCE" | "CALL_LOG" | "REVENUE" | "LEAVE" | "ALL";
@@ -177,41 +180,6 @@ export class ReportService {
   }
 
   /**
-   * Aggregates Revenue Figures
-   */
-  public static async getRevenueReport(
-    user: UserScope,
-    filters: ReportFilterQuery,
-  ) {
-    const scope = this.buildScopeFilter(
-      user,
-      filters.branchId,
-      filters.employeeId,
-    );
-    if (scope.employeeId) {
-      scope.employee = scope.employeeId;
-      delete scope.employeeId;
-    }
-
-    if (filters.startDate || filters.endDate) {
-      scope.date = {};
-      if (filters.startDate) scope.date.$gte = new Date(filters.startDate);
-      if (filters.endDate) scope.date.$lte = new Date(filters.endDate);
-    }
-
-    return Revenue.aggregate([
-      { $match: scope },
-      {
-        $group: {
-          _id: "$status",
-          totalAmount: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
-  }
-
-  /**
    * Aggregates Leave Metrics
    */
   public static async getLeaveReport(
@@ -247,30 +215,6 @@ export class ReportService {
   }
 
   /**
-   * Dashboard Summary API Pipeline
-   */
-  public static async getDashboardSummary(
-    user: UserScope,
-    filters: ReportFilterQuery,
-  ) {
-    const [leads, attendance, calls, revenue, leaves] = await Promise.all([
-      this.getLeadReport(user, filters),
-      this.getAttendanceReport(user, filters),
-      this.getCallReport(user, filters),
-      this.getRevenueReport(user, filters),
-      this.getLeaveReport(user, filters),
-    ]);
-
-    return {
-      leads,
-      attendance,
-      calls,
-      revenue,
-      leaves,
-    };
-  }
-
-  /**
    * CSV Data Exporter
    */
   public static exportToCSV(data: any[]): string {
@@ -299,5 +243,203 @@ export class ReportService {
     }
 
     return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
+  }
+
+  /**
+   * Aggregates Revenue Figures (Includes Today's Total and Overall Total)
+   */
+  public static async getRevenueReport(
+    user: UserScope,
+    filters: ReportFilterQuery,
+  ) {
+    const scope = this.buildScopeFilter(
+      user,
+      filters.branchId,
+      filters.employeeId,
+    );
+    if (scope.employeeId) {
+      scope.employee = scope.employeeId;
+      delete scope.employeeId;
+    }
+
+    // Calculate start and end of today
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const dateMatch: Record<string, any> = { ...scope };
+    if (filters.startDate || filters.endDate) {
+      dateMatch.date = {};
+      if (filters.startDate) dateMatch.date.$gte = new Date(filters.startDate);
+      if (filters.endDate) dateMatch.date.$lte = new Date(filters.endDate);
+    }
+
+    const [todayAgg, totalAgg] = await Promise.all([
+      Revenue.aggregate([
+        {
+          $match: { ...scope, date: { $gte: startOfToday, $lte: endOfToday } },
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      Revenue.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    return {
+      today: todayAgg[0]?.total || 0,
+      total: totalAgg[0]?.total || 0,
+    };
+  }
+
+  /**
+   * Aggregates Top Performing Branch, Employee, and Admin using Performance Period Filter
+   */
+  public static async getTopPerformers(
+    user: UserScope,
+    filters: ReportFilterQuery,
+  ) {
+    const scope = this.buildScopeFilter(
+      user,
+      filters.branchId,
+      filters.employeeId,
+    );
+
+    // Prefer performance-specific date ranges over global timeframe filter
+    const perfStart = filters.perfStartDate || filters.startDate;
+    const perfEnd = filters.perfEndDate || filters.endDate;
+
+    const dateMatch: Record<string, any> = { ...scope };
+    if (perfStart || perfEnd) {
+      dateMatch.date = {};
+      if (perfStart) dateMatch.date.$gte = new Date(perfStart);
+      if (perfEnd) dateMatch.date.$lte = new Date(perfEnd);
+    }
+
+    const [topBranchAgg, topEmployeeAgg, topAdminAgg] = await Promise.all([
+      // Top Branch
+      Revenue.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: "$branch", totalRevenue: { $sum: "$amount" } } },
+        { $sort: { totalRevenue: -1 } },
+        { $limit: 1 },
+        {
+          $lookup: {
+            from: "branches",
+            localField: "_id",
+            foreignField: "_id",
+            as: "branchDetails",
+          },
+        },
+        {
+          $unwind: { path: "$branchDetails", preserveNullAndEmptyArrays: true },
+        },
+      ]),
+
+      // Top Employee
+      Revenue.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: "$employee", totalRevenue: { $sum: "$amount" } } },
+        { $sort: { totalRevenue: -1 } },
+        { $limit: 1 },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "employeeDetails",
+          },
+        },
+        {
+          $unwind: {
+            path: "$employeeDetails",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: "branches",
+            localField: "employeeDetails.branch",
+            foreignField: "_id",
+            as: "branchDetails",
+          },
+        },
+        {
+          $unwind: { path: "$branchDetails", preserveNullAndEmptyArrays: true },
+        },
+      ]),
+
+      // Top Admin
+      Revenue.aggregate([
+        { $match: dateMatch },
+        { $group: { _id: "$createdBy", totalRevenue: { $sum: "$amount" } } },
+        { $sort: { totalRevenue: -1 } },
+        { $limit: 1 },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "adminDetails",
+          },
+        },
+        {
+          $unwind: { path: "$adminDetails", preserveNullAndEmptyArrays: true },
+        },
+      ]),
+    ]);
+
+    const branch = topBranchAgg[0]
+      ? {
+          name: topBranchAgg[0].branchDetails?.name || "N/A",
+          code: topBranchAgg[0].branchDetails?.code || "",
+          revenue: topBranchAgg[0].totalRevenue || 0,
+        }
+      : null;
+
+    const employee = topEmployeeAgg[0]
+      ? {
+          name: topEmployeeAgg[0].employeeDetails?.name || "N/A",
+          branchName: topEmployeeAgg[0].branchDetails?.name || "N/A",
+          revenue: topEmployeeAgg[0].totalRevenue || 0,
+        }
+      : null;
+
+    const admin = topAdminAgg[0]
+      ? {
+          name: topAdminAgg[0].adminDetails?.name || "N/A",
+          managedBranch: "Regional Operations",
+          revenue: topAdminAgg[0].totalRevenue || 0,
+        }
+      : null;
+
+    return { branch, employee, admin };
+  }
+
+  public static async getDashboardSummary(
+    user: UserScope,
+    filters: ReportFilterQuery,
+  ) {
+    const [leads, attendance, calls, revenue, leaves, topPerformers] =
+      await Promise.all([
+        this.getLeadReport(user, filters),
+        this.getAttendanceReport(user, filters),
+        this.getCallReport(user, filters),
+        this.getRevenueReport(user, filters),
+        this.getLeaveReport(user, filters),
+        this.getTopPerformers(user, filters),
+      ]);
+
+    return {
+      leads,
+      attendance,
+      calls,
+      revenue,
+      leaves,
+      topPerformers,
+    };
   }
 }

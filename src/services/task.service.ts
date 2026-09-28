@@ -245,7 +245,60 @@ export const updateTask = async (
     }
   }
 
-  // ✅ Validate leads update
+  // Handle Branch Update
+  let targetBranchId = task.branch.toString();
+  if (data.branch !== undefined) {
+    if (!mongoose.Types.ObjectId.isValid(data.branch)) {
+      throw new AppError("Invalid branch ID", 400, "INVALID_BRANCH_ID");
+    }
+    targetBranchId = data.branch;
+    task.branch = new mongoose.Types.ObjectId(data.branch);
+  }
+
+  // Handle Assignee / Reassignment Update
+  let previousAssigneeId: string | undefined;
+  if (data.assignedTo !== undefined) {
+    if (!mongoose.Types.ObjectId.isValid(data.assignedTo)) {
+      throw new AppError("Invalid employee ID", 400, "INVALID_EMPLOYEE_ID");
+    }
+
+    const employee = await User.findById(data.assignedTo)
+      .select("_id name role branches isActive")
+      .lean();
+
+    if (!employee || !employee.isActive) {
+      throw new AppError(
+        "Assigned employee not found or inactive",
+        400,
+        "EMPLOYEE_UNAVAILABLE",
+      );
+    }
+
+    if (employee.role !== ROLES.EMPLOYEE) {
+      throw new AppError(
+        "Tasks can only be assigned to employees",
+        400,
+        "INVALID_ASSIGNEE_ROLE",
+      );
+    }
+
+    const employeeBranches = (employee.branches || []).map((b) => b.toString());
+    if (!employeeBranches.includes(targetBranchId)) {
+      throw new AppError(
+        "Employee does not belong to the selected branch",
+        400,
+        "CROSS_BRANCH_ASSIGNMENT",
+      );
+    }
+
+    if (task.assignedTo.toString() !== data.assignedTo) {
+      previousAssigneeId = task.assignedTo.toString();
+      task.assignedTo = new mongoose.Types.ObjectId(data.assignedTo);
+      task.assignedBy = new mongoose.Types.ObjectId(user.id);
+    }
+  }
+
+  // Validate leads update
   if (data.leads !== undefined) {
     if (data.leads === null || data.leads.length === 0) {
       task.leads = [];
@@ -276,9 +329,8 @@ export const updateTask = async (
         );
       }
 
-      const targetBranch = data.branch || task.branch.toString();
       const invalidBranchLead = matchedLeads.find(
-        (l) => l.branch?.toString() !== targetBranch,
+        (l) => l.branch?.toString() !== targetBranchId,
       );
       if (invalidBranchLead) {
         throw new AppError(
@@ -292,7 +344,7 @@ export const updateTask = async (
     }
   }
 
-  // Apply general field updates...
+  // Apply general field updates
   if (data.title !== undefined) task.title = data.title;
   if (data.description !== undefined) task.description = data.description;
   if (data.priority !== undefined)
@@ -307,7 +359,29 @@ export const updateTask = async (
   if (data.remarks !== undefined) task.remarks = data.remarks;
 
   await task.save();
-  return task;
+
+  // Log activity if reassigned
+  if (previousAssigneeId) {
+    await createTaskActivity({
+      task: task._id.toString(),
+      activityType: TASK_ACTIVITY_TYPE.REASSIGNED,
+      performedBy: user.id,
+      branch: task.branch.toString(),
+      metadata: {
+        from: previousAssigneeId,
+        to: task.assignedTo.toString(),
+      },
+    });
+  }
+
+  // Return fully populated task document
+  return Task.findById(task._id)
+    .populate("assignedTo", "name email role branches")
+    .populate("assignedBy", "name email role")
+    .populate("createdBy", "name email role")
+    .populate("leads", "name phone email status")
+    .populate("branch", "name code")
+    .lean();
 };
 
 export const getTasks = async (
