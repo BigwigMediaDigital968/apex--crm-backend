@@ -221,6 +221,8 @@ export const PERMISSIONS = {
 
   REPORT_VIEW: "report:view",
   REPORT_EXPORT: "report:export",
+  DAILY_REPORT_VIEW: "daily-report:view",
+  DAILY_REPORT_CREATE: "daily-report:create",
 
   // AUDIT & ACTIVITY LOGS
   // =========================================================
