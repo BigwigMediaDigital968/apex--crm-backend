@@ -127,6 +127,7 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       event_type,
       action,
       duration,
+      answerDuration,
       record_url,
       recording_url,
       recordUrl,
@@ -223,13 +224,21 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
 
     const combinedReason = String(reason || "").toLowerCase();
 
+    // On the `ended` event Stringee's `duration` is the whole call INCLUDING
+    // ringing; `answerDuration` is the talk time (0 when nobody picked up).
+    // Using `duration` marked every rung-but-unanswered call as "ended" — and
+    // Stringee never records those, which looked like missing recordings.
+    const talkSeconds =
+      answerDuration !== undefined
+        ? parseInt(String(answerDuration), 10) || 0
+        : parseInt(String(duration || "0"), 10) || 0;
+
     if (
       rawEventType.includes("ended") ||
       rawEventType.includes("completed") ||
       rawEventType.includes("hangup")
     ) {
-      // If duration exists or call was answered, it ended naturally
-      normalizedStatus = parseInt(duration || "0", 10) > 0 ? "ended" : "missed";
+      normalizedStatus = talkSeconds > 0 ? "ended" : "missed";
     } else if (
       rawEventType.includes("answered") ||
       rawEventType.includes("accept")
@@ -273,11 +282,11 @@ export const handleCallEventsWebhook = async (req: Request, res: Response) => {
       toNumber: String(callerTo),
     };
 
-    // Store duration (Ensure duration is 0 if call was not connected/answered)
+    // Store talk time (0 if the call was not connected/answered)
     if (["missed", "rejected", "failed"].includes(normalizedStatus)) {
       updateData.duration = 0;
-    } else if (duration !== undefined) {
-      updateData.duration = parseInt(String(duration), 10) || 0;
+    } else if (answerDuration !== undefined || duration !== undefined) {
+      updateData.duration = talkSeconds;
     }
 
     if (finalRecordingUrl) updateData.recordingUrl = finalRecordingUrl;
@@ -516,26 +525,39 @@ export const proxyRecordingAudio = async (req: Request, res: Response) => {
         .json({ message: "recordingUrl query parameter is required" });
     }
 
-    // 1. Ensure target URL is valid and targets Stringee
-    let cleanUrl = recordingUrl.trim();
-    if (cleanUrl.startsWith("http://")) {
-      cleanUrl = cleanUrl.replace("http://", "https://");
+    // 1. Only real Stringee hosts — a loose `includes("stringee.com")` check
+    // would let any URL through and leak our REST token to it
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(recordingUrl.trim());
+    } catch {
+      return res.status(400).json({ message: "Invalid recording URL" });
     }
-
-    if (!cleanUrl.includes("stringee.com")) {
+    const host = parsedUrl.hostname.toLowerCase();
+    if (host !== "stringee.com" && !host.endsWith(".stringee.com")) {
       return res.status(403).json({ message: "Invalid recording URL domain" });
     }
 
-    // 2. Generate REST API Token
+    // 2. Stringee stores `http://api.stringee.com/...` URLs, but that host is
+    // geo-routed: from a non-Asia server (e.g. Render) it lands on a region that
+    // rejects our asia-2 key with `keySid invalid`. Call the project's region.
+    const apiBase = (
+      process.env.STRINGEE_API_BASE_URL || "https://asia-2.api.stringee.com"
+    ).replace(/\/+$/, "");
+    const cleanUrl = `${apiBase}${parsedUrl.pathname}${parsedUrl.search}`;
+
+    // 3. Generate REST API Token
     const stringeeToken = generateStringeeRestToken();
 
-    // 3. Request audio stream from Stringee using `X-STRINGEE-AUTH`
+    // 4. Request audio stream from Stringee using `X-STRINGEE-AUTH`. The
+    // browser's Range header is passed through so seeking works (Safari needs it).
     const response = await axios({
       method: "get",
       url: cleanUrl,
       headers: {
-        "X-STRINGEE-AUTH": stringeeToken, // <--- Correct Stringee Auth Header
+        "X-STRINGEE-AUTH": stringeeToken,
         "Accept-Encoding": "identity",
+        ...(req.headers.range && { Range: req.headers.range }),
       },
       responseType: "stream",
       decompress: false,
@@ -546,8 +568,11 @@ export const proxyRecordingAudio = async (req: Request, res: Response) => {
     const contentType =
       typeof rawContentType === "string" ? rawContentType : "audio/mpeg";
 
-    // 4. Handle non-200 responses / JSON error responses from Stringee
-    if (contentType.includes("application/json") || response.status !== 200) {
+    // 5. Handle error / JSON responses from Stringee
+    if (
+      contentType.includes("application/json") ||
+      (response.status !== 200 && response.status !== 206)
+    ) {
       let rawData = "";
       response.data.on(
         "data",
@@ -563,19 +588,19 @@ export const proxyRecordingAudio = async (req: Request, res: Response) => {
       return;
     }
 
-    // 5. Send CORS & Streaming headers to the browser
+    // 6. Send CORS & Streaming headers to the browser
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Content-Type", contentType);
 
-    if (response.headers["content-length"]) {
-      res.setHeader(
-        "Content-Length",
-        String(response.headers["content-length"])
-      );
+    for (const header of ["content-length", "content-range"]) {
+      if (response.headers[header]) {
+        res.setHeader(header, String(response.headers[header]));
+      }
     }
 
+    res.status(response.status);
     return response.data.pipe(res);
   } catch (error: any) {
     console.error(
