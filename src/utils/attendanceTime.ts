@@ -1,3 +1,5 @@
+import { getTimeInTimezone, timeToMinutes } from "./timezone.js";
+
 export interface WorkingTimeResult {
   lateMinutes: number;
   isLate: boolean;
@@ -8,32 +10,6 @@ export interface CheckoutTimeResult {
   isEarlyCheckout: boolean;
   totalWorkingMinutes: number;
 }
-
-const timeToMinutes = (time: string): number => {
-  const parts = time.split(":").map(Number);
-  const hours = parts[0];
-  const minutes = parts[1];
-
-  if (
-    hours === undefined ||
-    minutes === undefined ||
-    isNaN(hours) ||
-    isNaN(minutes)
-  ) {
-    throw new Error(`Invalid time format: "${time}". Expected "HH:mm".`);
-  }
-
-  return hours * 60 + minutes;
-};
-
-const getTimeInTimezone = (date: Date, timezone: string): string => {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
-};
 
 export const calculateLateMinutes = ({
   checkInTime,

@@ -5,55 +5,97 @@ import {
   getMyDailyReports,
   getAllDailyReports,
   getDailyReportById,
+  reviewDailyReport,
+  getMissingDailyReports,
+  getDailyReportSummary,
+  exportDailyReports,
 } from "../controllers/dailyReportController.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/authorize.middleware.js";
 import { trackActivity } from "../middleware/auditLogger.middleware.js";
 import { PERMISSIONS } from "../constants/permissions.js";
 
+// Deliberately no enforceWorkingHours: reports are due at the end of the day
+// and the late window runs past closing time.
 const router = Router();
 
-// 1. CHECK SUBMISSION WINDOW AVAILABILITY (Any authenticated employee)
+router.use(authenticate);
+
+// ---------- Employee: own reports ----------
+
+// 1. TODAY'S WINDOW + REPORT + SYSTEM METRICS (for prefill)
 router.get(
   "/window",
-  authenticate,
-  checkReportWindow
+  authorize(PERMISSIONS.DAILY_REPORT_CREATE),
+  checkReportWindow,
 );
 
-// 2. SUBMIT DAILY REPORT (Employees)
+// 2. SUBMIT OR UPDATE TODAY'S REPORT
 router.post(
   "/",
-  authenticate,
   authorize(PERMISSIONS.DAILY_REPORT_CREATE),
   trackActivity(
     "DAILY_REPORT",
-    "CREATED",
-    () => `Submitted daily activity report`
+    "SUBMITTED",
+    () => "Submitted daily activity report",
   ),
-  submitDailyReport
+  submitDailyReport,
 );
 
-// 3. READ LOGGED-IN EMPLOYEE'S REPORT HISTORY
+// 3. OWN HISTORY
 router.get(
   "/my",
-  authenticate,
-  getMyDailyReports
+  authorize(PERMISSIONS.DAILY_REPORT_CREATE),
+  getMyDailyReports,
 );
 
-// 4. READ / LIST ALL DAILY REPORTS (MANAGEMENT: Admin, Manager, Head)
+// ---------- Management: Manager, Admin, Head (branch-scoped) ----------
+// Static paths must stay above "/:id".
+
+router.get(
+  "/missing",
+  authorize(PERMISSIONS.DAILY_REPORT_VIEW),
+  getMissingDailyReports,
+);
+
+router.get(
+  "/summary",
+  authorize(PERMISSIONS.DAILY_REPORT_VIEW),
+  getDailyReportSummary,
+);
+
+router.get(
+  "/export",
+  authorize(PERMISSIONS.DAILY_REPORT_EXPORT),
+  trackActivity(
+    "DAILY_REPORT",
+    "EXPORTED",
+    (req) => `Exported daily reports (${req.query.format || "csv"})`,
+  ),
+  exportDailyReports,
+);
+
 router.get(
   "/",
-  authenticate,
   authorize(PERMISSIONS.DAILY_REPORT_VIEW),
-  getAllDailyReports
+  getAllDailyReports,
 );
 
-// 5. READ SINGLE DAILY REPORT BY ID (MANAGEMENT: Admin, Manager, Head)
 router.get(
   "/:id",
-  authenticate,
   authorize(PERMISSIONS.DAILY_REPORT_VIEW),
-  getDailyReportById
+  getDailyReportById,
+);
+
+router.patch(
+  "/:id/review",
+  authorize(PERMISSIONS.DAILY_REPORT_REVIEW),
+  trackActivity(
+    "DAILY_REPORT",
+    "REVIEWED",
+    (req) => `Reviewed daily report ID: ${req.params.id}`,
+  ),
+  reviewDailyReport,
 );
 
 export default router;

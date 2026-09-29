@@ -7,7 +7,7 @@ export interface ICallLog extends Document {
   callId: string;
   fromNumber: string;
   toNumber: string;
-  callStatus: "started" | "answered" | "ended" | "missed" | "rejected";
+  callStatus: "started" | "answered" | "ended" | "missed" | "rejected" | "failed";
   duration: number;
   recordingUrl?: string;
   createdAt: Date;
@@ -24,7 +24,7 @@ const callLogSchema = new Schema<ICallLog>(
     toNumber: { type: String, default: "" },
     callStatus: {
       type: String,
-      enum: ["started", "answered", "ended", "missed", "rejected"],
+      enum: ["started", "answered", "ended", "missed", "rejected", "failed"],
       default: "started",
     },
     duration: { type: Number, default: 0 },

@@ -161,6 +161,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // Reports
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.REPORT_EXPORT,
+    PERMISSIONS.DAILY_REPORT_VIEW,
+    PERMISSIONS.DAILY_REPORT_REVIEW,
+    PERMISSIONS.DAILY_REPORT_EXPORT,
 
     // Audit
     PERMISSIONS.AUDIT_VIEW,
@@ -272,6 +275,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // Reports
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.DAILY_REPORT_VIEW,
+    PERMISSIONS.DAILY_REPORT_REVIEW,
 
     // Audit / Activity
     PERMISSIONS.ACTIVITY_LOG_VIEW,
@@ -362,7 +366,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Own reports
     PERMISSIONS.REPORT_VIEW,
-    PERMISSIONS.DAILY_REPORT_VIEW,
+
+    // Own daily reports only; the team view is management's
     PERMISSIONS.DAILY_REPORT_CREATE,
   ],
 };

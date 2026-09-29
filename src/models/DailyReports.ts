@@ -1,24 +1,64 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export interface IDailyReport extends Document {
-  employeeId: mongoose.Types.ObjectId;
-  branchId?: mongoose.Types.ObjectId;
-  reportDate: Date; // Normalized to YYYY-MM-DD
-  reportDescription: string; // Fixed: lowercase string type
+import {
+  DAILY_REPORT_MAX_CUSTOM_FIELDS,
+  DAILY_REPORT_STATUS,
+  type DailyReportStatus,
+} from "../constants/dailyReport.js";
+
+export interface IDailyReportCustomField {
+  label: string;
+  value: string;
+}
+
+/** What the system recorded for the day, snapshotted on every save. */
+export interface IDailyReportSystemMetrics {
   callsAttended: number;
   callsAnswered: number;
   conversions: number;
   totalCallDurationSeconds: number;
+  computedAt: Date;
+}
+
+export interface IDailyReportReview {
+  reviewedBy: mongoose.Types.ObjectId;
+  reviewedAt: Date;
+  remark?: string;
+}
+
+export interface IDailyReport extends Document {
+  employeeId: mongoose.Types.ObjectId;
+  branchId: mongoose.Types.ObjectId;
+  /** "YYYY-MM-DD" in the branch timezone, same convention as Attendance.date. */
+  reportDate: string;
+
   workCompleted: string;
+  callsAttended: number;
+  callsAnswered: number;
+  conversions: number;
+  totalCallDurationSeconds: number;
   dailyFeedback?: string;
-  additionalData?: Record<string, any>;
+  customFields: IDailyReportCustomField[];
+
+  systemMetrics: IDailyReportSystemMetrics;
+
   submittedAt: Date;
-  status: "SUBMITTED" | "LATE";
+  status: DailyReportStatus;
+  editCount: number;
+  review?: IDailyReportReview;
+
   createdAt: Date;
   updatedAt: Date;
 }
 
-const DailyReportSchema: Schema = new Schema(
+const nonNegativeInt = {
+  type: Number,
+  required: true,
+  default: 0,
+  min: 0,
+};
+
+const DailyReportSchema = new Schema<IDailyReport>(
   {
     employeeId: {
       type: Schema.Types.ObjectId,
@@ -29,64 +69,73 @@ const DailyReportSchema: Schema = new Schema(
     branchId: {
       type: Schema.Types.ObjectId,
       ref: "Branch",
-      index: true, // Added index for faster branch-wise management filtering
-    },
-    reportDate: {
-      type: Date,
       required: true,
       index: true,
     },
-    reportDescription: {
+    reportDate: {
       type: String,
       required: true,
-      trim: true,
+      match: /^\d{4}-\d{2}-\d{2}$/,
+      index: true,
     },
-    callsAttended: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    callsAnswered: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    conversions: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
-    totalCallDurationSeconds: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
-    },
+
     workCompleted: {
       type: String,
       required: true,
       trim: true,
+      maxlength: 2000,
     },
+    callsAttended: nonNegativeInt,
+    callsAnswered: nonNegativeInt,
+    conversions: nonNegativeInt,
+    totalCallDurationSeconds: nonNegativeInt,
     dailyFeedback: {
       type: String,
       trim: true,
+      maxlength: 2000,
       default: "",
     },
-    additionalData: {
-      type: Schema.Types.Mixed,
-      default: {},
+    customFields: {
+      type: [
+        {
+          _id: false,
+          label: { type: String, required: true, trim: true, maxlength: 60 },
+          value: { type: String, trim: true, maxlength: 500, default: "" },
+        },
+      ],
+      default: [],
+      validate: {
+        validator: (fields: unknown[]) =>
+          fields.length <= DAILY_REPORT_MAX_CUSTOM_FIELDS,
+        message: `At most ${DAILY_REPORT_MAX_CUSTOM_FIELDS} additional fields are allowed`,
+      },
     },
+
+    systemMetrics: {
+      callsAttended: { type: Number, default: 0 },
+      callsAnswered: { type: Number, default: 0 },
+      conversions: { type: Number, default: 0 },
+      totalCallDurationSeconds: { type: Number, default: 0 },
+      computedAt: { type: Date, default: Date.now },
+    },
+
     submittedAt: {
       type: Date,
       default: Date.now,
     },
     status: {
       type: String,
-      enum: ["SUBMITTED", "LATE"],
-      default: "SUBMITTED",
+      enum: Object.values(DAILY_REPORT_STATUS),
+      default: DAILY_REPORT_STATUS.SUBMITTED,
+    },
+    editCount: {
+      type: Number,
+      default: 0,
+    },
+    review: {
+      reviewedBy: { type: Schema.Types.ObjectId, ref: "User" },
+      reviewedAt: { type: Date },
+      remark: { type: String, trim: true, maxlength: 1000 },
     },
   },
   {
@@ -94,8 +143,9 @@ const DailyReportSchema: Schema = new Schema(
   },
 );
 
-// Prevent duplicate report submissions per employee on the same date
+// One report per employee per day.
 DailyReportSchema.index({ employeeId: 1, reportDate: 1 }, { unique: true });
+DailyReportSchema.index({ branchId: 1, reportDate: -1 });
 
 export const DailyReport = mongoose.model<IDailyReport>(
   "DailyReport",

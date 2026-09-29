@@ -20,46 +20,12 @@ import type {
 import { calculateLateMinutes } from "../utils/attendanceTime.js";
 import { calculateCheckoutDetails } from "../utils/attendanceTime.js";
 import { Holiday } from "../models/Holiday.js";
+import {
+  getDateInTimezone,
+  getDayOfWeekInTimezone,
+} from "../utils/timezone.js";
 
-const getDateInTimezone = (timezone: string, date = new Date()): string => {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-
-  return formatter.format(date);
-};
-
-const getDayOfWeekInTimezone = (
-  timezone: string,
-  date = new Date(),
-): number => {
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    weekday: "short",
-  }).format(date);
-
-  const days: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-
-  const dayNumber = days[weekday];
-  if (dayNumber === undefined) {
-    throw new AppError("Invalid day of week calculated", 500, "INVALID_DAY");
-  }
-
-  return dayNumber;
-};
-
-const getEmployeeBranch = async (employeeId: string) => {
+export const getEmployeeBranch = async (employeeId: string) => {
   const user = await User.findById(employeeId)
     .select("_id name email role branches isActive")
     .lean();
