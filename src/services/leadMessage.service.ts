@@ -5,7 +5,6 @@ import { Integration, type IIntegration } from "../models/Integration.js";
 import { LEAD_ACTIVITY_TYPE } from "../models/LeadActivity.js";
 import { LeadMessage } from "../models/LeadMessage.js";
 import {
-  INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
   LEAD_MESSAGE_DIRECTION,
   LEAD_MESSAGE_STATUS,
@@ -27,22 +26,32 @@ type IntegrationDoc = IIntegration & { _id: Types.ObjectId };
  * as the lead page. A lead the user can't open reads as "not found".
  */
 
-/** The lead's own integration, or else the newest active WhatsApp integration. */
+/**
+ * The lead's own integration. WhatsApp is only available on leads linked to
+ * one (created by WATI, or matched to a WATI contact by phone); other leads
+ * get null and the routes answer WHATSAPP_NOT_AVAILABLE.
+ */
 const resolveIntegration = async (lead: { integration?: unknown }) => {
-  const own = lead.integration
-    ? await Integration.findOne({ _id: lead.integration, status: { $ne: INTEGRATION_STATUS.PAUSED } }).select(
-        "+credentialsEncrypted",
-      )
-    : null;
-  if (own) return own as unknown as IntegrationDoc;
+  if (!lead.integration) return null;
+  const own = await Integration.findOne({
+    _id: lead.integration,
+    status: { $ne: INTEGRATION_STATUS.PAUSED },
+  }).select("+credentialsEncrypted");
+  return own as unknown as IntegrationDoc | null;
+};
 
-  const fallback = await Integration.findOne({
-    provider: INTEGRATION_PROVIDER.WATI,
-    status: INTEGRATION_STATUS.ACTIVE,
-  })
-    .sort({ createdAt: -1 })
-    .select("+credentialsEncrypted");
-  return fallback as unknown as IntegrationDoc | null;
+const requireIntegration = async (lead: { integration?: unknown }) => {
+  const integration = await resolveIntegration(lead);
+  if (!integration) {
+    throw new AppError(
+      lead.integration
+        ? "This lead's WhatsApp integration is paused or was removed."
+        : "WhatsApp is only available for leads that came from WATI.",
+      409,
+      "WHATSAPP_NOT_AVAILABLE",
+    );
+  }
+  return integration;
 };
 
 /** The id WhatsApp knows this contact by. */
@@ -90,9 +99,7 @@ export const listLeadMessages = async (user: AuthenticatedUser, leadId: string, 
 
 export const listLeadTemplates = async (user: AuthenticatedUser, leadId: string) => {
   const lead = await getLeadById(leadId, user);
-  const integration = await resolveIntegration(lead);
-  if (!integration) throw new AppError("WhatsApp isn't connected", 409, "WHATSAPP_NOT_CONNECTED");
-  return listProviderTemplates(integration);
+  return listProviderTemplates(await requireIntegration(lead));
 };
 
 const renderTemplate = (body: string | null | undefined, params: { name: string; value: string }[]) => {
@@ -102,8 +109,7 @@ const renderTemplate = (body: string | null | undefined, params: { name: string;
 
 export const sendLeadMessage = async (user: AuthenticatedUser, leadId: string, input: SendLeadMessageInput) => {
   const lead = await getLeadById(leadId, user);
-  const integration = await resolveIntegration(lead);
-  if (!integration) throw new AppError("WhatsApp isn't connected", 409, "WHATSAPP_NOT_CONNECTED");
+  const integration = await requireIntegration(lead);
 
   if (input.type === "text") {
     const { windowOpen } = await windowInfo(lead._id as Types.ObjectId);
