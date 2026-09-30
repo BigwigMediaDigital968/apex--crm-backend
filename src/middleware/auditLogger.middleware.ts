@@ -19,6 +19,7 @@ export const trackActivity = (
     | "REVENUE"
     | "REPORT"
     | "DAILY_REPORT"
+    | "SALARY"
     | "SYSTEM",
   action: string,
   // May return a Promise so descriptions can look up the human-readable

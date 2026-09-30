@@ -23,6 +23,7 @@ import stringeeNumberroutes from "./stringeeNumber.routes.js";
 import activityLogRoutes from "./activityLog.routes.js";
 import reportRoutes from "./report.routes.js";
 import dailyReportRoutes from "./dailyReportRoutes.js";
+import salaryRoutes from "./salary.routes.js";
 
 const router = Router();
 
@@ -58,5 +59,6 @@ router.use("/stringee-numbers", stringeeNumberroutes);
 router.use("/activity-logs", activityLogRoutes);
 router.use("/reports", reportRoutes);
 router.use("/daily-reports", dailyReportRoutes);
+router.use("/salary", salaryRoutes);
 
 export default router;
