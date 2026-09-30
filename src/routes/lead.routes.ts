@@ -23,6 +23,11 @@ import {
 } from "../controllers/lead-assignment.controller.js";
 
 import { importLeadsController } from "../controllers/lead-import.controller.js";
+import {
+  getLeadMessages,
+  getLeadTemplates,
+  postLeadMessage,
+} from "../controllers/integration.controller.js";
 
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/authorize.middleware.js";
@@ -184,6 +189,30 @@ router.post(
       `Imported bulk leads file: ${req.file?.originalname || "Excel file"}`,
   ),
   importLeadsController,
+);
+
+// WHATSAPP ON A LEAD
+// Access is the lead's own: the service loads the lead through getLeadById,
+// so an employee only reaches chats of leads assigned to them.
+router.get(
+  "/:id/messages",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_VIEW),
+  getLeadMessages,
+);
+
+router.get(
+  "/:id/messages/templates",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_MESSAGE_SEND),
+  getLeadTemplates,
+);
+
+router.post(
+  "/:id/messages",
+  authenticate,
+  authorize(PERMISSIONS.LEAD_MESSAGE_SEND),
+  postLeadMessage,
 );
 
 export default router;

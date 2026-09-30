@@ -21,6 +21,7 @@ export type ActivityModule =
   | "INCENTIVE"
   | "REPORT"
   | "DAILY_REPORT"
+  | "INTEGRATION"
   | "SYSTEM";
 
 export interface IActivityLog extends Document {

@@ -24,6 +24,8 @@ import activityLogRoutes from "./activityLog.routes.js";
 import reportRoutes from "./report.routes.js";
 import dailyReportRoutes from "./dailyReportRoutes.js";
 import salaryRoutes from "./salary.routes.js";
+import integrationRoutes from "./integration.routes.js";
+import notificationRoutes from "./notification.routes.js";
 
 const router = Router();
 
@@ -60,5 +62,7 @@ router.use("/activity-logs", activityLogRoutes);
 router.use("/reports", reportRoutes);
 router.use("/daily-reports", dailyReportRoutes);
 router.use("/salary", salaryRoutes);
+router.use("/integrations", integrationRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;

@@ -24,5 +24,8 @@ export const env = {
 
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1d",
 
-  clientUrl: process.env.CLIENT_URL || "http://localhost:5173"
+  clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+
+  // Public URL of this API; integration webhook URLs are built from it.
+  backendUrl: (process.env.BACKEND_URL || `http://localhost:${Number(process.env.PORT) || 8000}`).replace(/\/+$/, ""),
 };

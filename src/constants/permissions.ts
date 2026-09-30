@@ -170,6 +170,14 @@ export const PERMISSIONS = {
   SALARY_MANAGE: "salary:manage",
 
   // =========================================================
+  // INTEGRATIONS (lead sources) & WHATSAPP ON LEADS
+  // =========================================================
+
+  INTEGRATION_VIEW: "integration:view",
+  INTEGRATION_MANAGE: "integration:manage",
+  LEAD_MESSAGE_SEND: "lead-message:send",
+
+  // =========================================================
   // ACHIEVEMENTS
   // =========================================================
 

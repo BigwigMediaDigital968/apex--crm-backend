@@ -10,6 +10,8 @@ export const LEAD_ACTIVITY_TYPE = {
   REMARK_ADDED: "remark_added",
   FOLLOW_UP: "follow_up",
   CALL_LOGGED: "call_logged",
+  WHATSAPP_IN: "whatsapp_in",
+  WHATSAPP_OUT: "whatsapp_out",
 } as const;
 
 export type LeadActivityType =

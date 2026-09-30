@@ -7,6 +7,7 @@ export const LEAD_SOURCE_TYPE = {
   EXCEL: "EXCEL",
   API: "API",
   IMPORT: "IMPORT",
+  INTEGRATION: "INTEGRATION",
 } as const;
 
 export type LeadSourceType =
@@ -36,6 +37,9 @@ export interface ILead extends Document {
   sourceType: LeadSourceType;
 
   externalId?: string;
+
+  /** Set for leads created by a lead-source integration (e.g. WATI). */
+  integration?: mongoose.Types.ObjectId;
 
   branch?: mongoose.Types.ObjectId;
 
@@ -137,6 +141,13 @@ const leadSchema = new Schema<ILead>(
       type: String,
       trim: true,
       maxlength: 200,
+      index: true,
+      sparse: true,
+    },
+
+    integration: {
+      type: Schema.Types.ObjectId,
+      ref: "Integration",
       index: true,
       sparse: true,
     },
