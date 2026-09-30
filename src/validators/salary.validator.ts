@@ -110,6 +110,11 @@ export const payoutListQuerySchema = z.object({
 
 export type PayoutListQuery = z.infer<typeof payoutListQuerySchema>;
 
+export const myPayoutsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(12),
+});
+
 export const payoutExportQuerySchema = z.object({
   format: z.enum(["csv", "excel"]).default("csv"),
 });

@@ -7,9 +7,11 @@ import {
   exportSalaryPayout,
   generateSalaryPayout,
   getEligiblePayoutEmployees,
+  getMySalaryPayout,
   getSalaryPayout,
   getSalarySettings,
   listSalaryDeductions,
+  listMySalaryPayouts,
   listSalaryPayouts,
   markSalaryPayoutPaid,
   previewSalaryPayout,
@@ -22,12 +24,19 @@ import { authorize } from "../middleware/authorize.middleware.js";
 import { trackActivity } from "../middleware/auditLogger.middleware.js";
 import { PERMISSIONS } from "../constants/permissions.js";
 
-// Payouts span every branch and expose everyone's salary, so the whole module
-// is gated on SALARY_MANAGE (Head only). Admin's SALARY_VIEW is deliberately
-// not enough to read payouts.
+// Payouts span every branch and expose everyone's salary, so the management
+// endpoints are gated on SALARY_MANAGE (Head only). Admin's SALARY_VIEW is
+// deliberately not enough to read payouts. The only exception is "/my": any
+// signed-in user can read their own line, and nothing else.
 const router = Router();
 
 router.use(authenticate);
+
+// ---------- Self-service: own payslips ----------
+
+router.get("/my/payouts", listMySalaryPayouts);
+
+router.get("/my/payouts/:id", getMySalaryPayout);
 
 // ---------- Settings (optional; defaults apply when none are saved) ----------
 

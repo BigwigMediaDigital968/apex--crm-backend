@@ -1474,3 +1474,94 @@ export const deleteDeduction = async (id: string) => {
   }
   await deduction.deleteOne();
 };
+
+// =========================================================================
+// Employee self-service: own payslips
+// =========================================================================
+
+/**
+ * What an employee may see of their own line. Head's internal notes stay
+ * out: edit reasons, calculated-vs-final values, warnings, adjustment notes
+ * and waived suggestions.
+ */
+const toPayslipLine = (line: ComputedLine | Record<string, any>) => ({
+  employeeCode: line.employeeCode,
+  name: line.name,
+  designation: line.designation ?? null,
+  branch: line.branch ?? null,
+  monthlyGross: line.salarySnapshot?.grossSalary ?? 0,
+  perDayRate: line.perDayRate,
+  days: line.days,
+  lateCount: line.lateCount,
+  earnings: line.earnings,
+  deductions: line.deductions,
+  deductionItems: [
+    ...((line.suggestions ?? []) as PayoutSuggestion[])
+      .filter((s) => s.decision === "approved")
+      .map((s) => ({ date: s.date, description: s.description, amount: s.amount })),
+    ...((line.manualDeductions ?? []) as PayoutManualDeduction[])
+      .filter((d) => d.decision === "approved")
+      .map((d) => ({ date: d.date, description: d.reason, amount: d.computedAmount })),
+  ],
+  adjustments: ((line.adjustments ?? []) as IPayoutAdjustment[]).map((a) => ({
+    label: a.label,
+    amount: a.amount,
+  })),
+  net: line.net,
+});
+
+const MY_PAYOUT_FIELDS = "payoutNo from to status generatedAt paidAt";
+
+export const listMyPayouts = async (userId: string, page: number, limit: number) => {
+  const me = toObjectId(userId);
+  const filter = {
+    status: { $ne: SALARY_PAYOUT_STATUS.CANCELLED },
+    "lines.employee": me,
+  };
+
+  const [items, total] = await Promise.all([
+    SalaryPayout.find(filter)
+      .select(MY_PAYOUT_FIELDS)
+      .select({ lines: { $elemMatch: { employee: me } } })
+      .sort({ from: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    SalaryPayout.countDocuments(filter),
+  ]);
+
+  return {
+    items: items.map(({ lines, ...payout }) => {
+      const line = lines?.[0];
+      return {
+        ...payout,
+        net: line?.net ?? 0,
+        gross: line?.earnings?.gross ?? 0,
+        deductions: line?.deductions?.total ?? 0,
+      };
+    }),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
+};
+
+export const getMyPayout = async (userId: string, id: string) => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new AppError("Invalid payout ID", 400, "INVALID_PAYOUT_ID");
+  }
+  const me = toObjectId(userId);
+  const payout = await SalaryPayout.findOne({
+    _id: toObjectId(id),
+    status: { $ne: SALARY_PAYOUT_STATUS.CANCELLED },
+    "lines.employee": me,
+  })
+    .select(MY_PAYOUT_FIELDS)
+    .select({ lines: { $elemMatch: { employee: me } } })
+    .lean();
+
+  // Someone else's payout reads as missing, not forbidden.
+  const line = payout?.lines?.[0];
+  if (!payout || !line) throw new AppError("Payslip not found", 404, "PAYSLIP_NOT_FOUND");
+
+  const { lines: _lines, ...meta } = payout;
+  return { ...meta, line: toPayslipLine(line) };
+};

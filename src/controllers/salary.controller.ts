@@ -7,9 +7,11 @@ import {
   exportPayout,
   generatePayout,
   getEligibleEmployees,
+  getMyPayout,
   getPayout,
   getSettings,
   listDeductions,
+  listMyPayouts,
   listPayouts,
   markPayoutPaid,
   previewPayout,
@@ -22,6 +24,7 @@ import {
   createDeductionSchema,
   deductionListQuerySchema,
   eligibleEmployeesQuerySchema,
+  myPayoutsQuerySchema,
   payoutExportQuerySchema,
   payoutInputSchema,
   payoutListQuerySchema,
@@ -158,4 +161,21 @@ export const reviewSalaryDeduction = async (req: Request, res: Response) => {
 export const deleteSalaryDeduction = async (req: Request, res: Response) => {
   await deleteDeduction(requireIdParam(req));
   return res.status(200).json({ success: true, message: "Deduction deleted" });
+};
+
+// ---------- Employee self-service ----------
+
+export const listMySalaryPayouts = async (req: Request, res: Response) => {
+  const user = requireUser(req);
+  const { page, limit } = myPayoutsQuerySchema.parse(req.query);
+  const result = await listMyPayouts(user.id, page, limit);
+  return res
+    .status(200)
+    .json({ success: true, data: result.items, pagination: result.pagination });
+};
+
+export const getMySalaryPayout = async (req: Request, res: Response) => {
+  const user = requireUser(req);
+  const data = await getMyPayout(user.id, requireIdParam(req));
+  return res.status(200).json({ success: true, data });
 };
