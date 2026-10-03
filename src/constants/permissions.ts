@@ -222,6 +222,10 @@ export const PERMISSIONS = {
   CONTEST_CREATE: "contest:create",
   CONTEST_UPDATE: "contest:update",
   CONTEST_VIEW_ALL: "contest:view-all",
+  // Join / withdraw ("I'm in") — contestants only
+  CONTEST_JOIN: "contest:join",
+  CONTEST_PARTICIPANT_VIEW: "contest:participant:view",
+  CONTEST_LEADERBOARD_VIEW: "contest:leaderboard:view",
 
   // =========================================================
   // REPORTS

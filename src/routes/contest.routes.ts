@@ -9,7 +9,12 @@ import {
   getContestByIdHandler,
   updateContestHandler,
   toggleContestStatusHandler,
-  getAllContestsHandler
+  getAllContestsHandler,
+  joinContestHandler,
+  withdrawFromContestHandler,
+  getContestParticipantsHandler,
+  getContestLeaderboardHandler,
+  removeContestParticipantHandler,
 } from "../controllers/contest.controller.js";
 
 const router = Router();
@@ -48,6 +53,40 @@ router.patch(
   "/:id/status",
   authorize(PERMISSIONS.CONTEST_UPDATE),
   toggleContestStatusHandler,
+);
+// Employee opts in with "I'm in" (only before the join deadline)
+router.post(
+  "/:id/join",
+  authorize(PERMISSIONS.CONTEST_JOIN),
+  joinContestHandler,
+);
+
+// Employee backs out (only before the join deadline)
+router.delete(
+  "/:id/join",
+  authorize(PERMISSIONS.CONTEST_JOIN),
+  withdrawFromContestHandler,
+);
+
+// Who has joined (Head/Admin: any; everyone else: own-branch only)
+router.get(
+  "/:id/participants",
+  authorize(PERMISSIONS.CONTEST_PARTICIPANT_VIEW),
+  getContestParticipantsHandler,
+);
+
+// Remove a participant; they can't rejoin (Head Only)
+router.delete(
+  "/:id/participants/:userId",
+  authorize(PERMISSIONS.CONTEST_UPDATE),
+  removeContestParticipantHandler,
+);
+
+// Standings among participants only
+router.get(
+  "/:id/leaderboard",
+  authorize(PERMISSIONS.CONTEST_LEADERBOARD_VIEW),
+  getContestLeaderboardHandler,
 );
 
 export default router;

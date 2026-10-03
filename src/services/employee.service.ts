@@ -21,6 +21,12 @@ import { ROLES, type Role } from "../constants/roles.js";
 
 import { AppError } from "../utils/AppError.js";
 
+import {
+  isSingleBranchRole,
+  managerBelongsToBranch,
+  resolveProfileBranch,
+} from "./employeeBranchSync.service.js";
+
 interface CreateEmployeeInput {
   userId: string;
   employeeCode: string;
@@ -104,8 +110,6 @@ export const createEmployeeProfile = async (
   data: CreateEmployeeInput,
   context: AccessContext,
 ) => {
-  assertBranchAccess(data.branchId, context);
-
   const user = await User.findById(data.userId);
 
   if (!user) {
@@ -120,7 +124,12 @@ export const createEmployeeProfile = async (
     );
   }
 
-  const branch = await Branch.findById(data.branchId);
+  // Profile branch follows the user's branch assignment.
+  const branchId = resolveProfileBranch(user, data.branchId);
+
+  assertBranchAccess(branchId, context);
+
+  const branch = await Branch.findById(branchId);
 
   if (!branch || !branch.isActive) {
     throw new AppError("Branch not found or inactive", 404, "BRANCH_NOT_FOUND");
@@ -170,7 +179,7 @@ export const createEmployeeProfile = async (
     }
 
     const managerHasBranch = manager.branches.some(
-      (id) => id.toString() === data.branchId,
+      (id) => id.toString() === branchId,
     );
 
     if (!managerHasBranch) {
@@ -189,7 +198,7 @@ export const createEmployeeProfile = async (
 
     profileImage: data.profileImage,
 
-    branch: new Types.ObjectId(data.branchId),
+    branch: new Types.ObjectId(branchId),
 
     reportingManager: data.reportingManager
       ? new Types.ObjectId(data.reportingManager)
@@ -257,8 +266,27 @@ export const updateEmployeeProfile = async (
     throw new AppError("Employee profile not found", 404, "EMPLOYEE_NOT_FOUND");
   }
 
-  // 2. Access control check on the existing employee's branch
-  assertBranchAccess(employee.branch.toString(), context);
+  const user = await User.findById(employee.user).select("role branches");
+
+  if (!user) {
+    throw new AppError("User not found", 404, "USER_NOT_FOUND");
+  }
+
+  // 2. Resolve the branch from the user's assignment (see
+  // employeeBranchSync.service) — this also repairs a profile whose branch
+  // drifted from the user's. Access is checked against that branch; an
+  // admin's profile moving between their branches also needs the old one.
+  const currentBranchId = employee.branch.toString();
+  const targetBranchId = resolveProfileBranch(
+    user,
+    data.branchId,
+    currentBranchId,
+  );
+
+  assertBranchAccess(targetBranchId, context);
+  if (targetBranchId !== currentBranchId && !isSingleBranchRole(user.role)) {
+    assertBranchAccess(currentBranchId, context);
+  }
 
   // 3. Prevent standard employees from updating other profiles or critical fields
   if (
@@ -272,12 +300,9 @@ export const updateEmployeeProfile = async (
     );
   }
 
-  // 4. Validate branch update (if changing branch)
-  let targetBranchId = employee.branch.toString();
-  if (data.branchId && data.branchId !== targetBranchId) {
-    assertBranchAccess(data.branchId, context);
-
-    const branch = await Branch.findById(data.branchId);
+  // 4. Apply branch change (if any)
+  if (targetBranchId !== currentBranchId) {
+    const branch = await Branch.findById(targetBranchId);
     if (!branch || !branch.isActive) {
       throw new AppError(
         "Target branch not found or inactive",
@@ -285,8 +310,16 @@ export const updateEmployeeProfile = async (
         "BRANCH_NOT_FOUND",
       );
     }
-    targetBranchId = data.branchId;
-    employee.branch = new Types.ObjectId(data.branchId);
+    employee.branch = new Types.ObjectId(targetBranchId);
+
+    // A reporting manager must share the profile's branch.
+    if (
+      data.reportingManager === undefined &&
+      employee.reportingManager &&
+      !(await managerBelongsToBranch(employee.reportingManager, targetBranchId))
+    ) {
+      employee.reportingManager = undefined;
+    }
   }
 
   // 5. Validate unique employee code (if updating)

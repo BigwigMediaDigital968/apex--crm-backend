@@ -16,6 +16,8 @@ export interface IContest extends Document {
   startDate: Date;
   endDate: Date;
   isActive: boolean;
+  joinDeadline?: Date; // last moment to join/withdraw; falls back to endDate
+  participantCount: number;
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -43,6 +45,8 @@ const contestSchema = new Schema<IContest>(
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     isActive: { type: Boolean, default: true, index: true },
+    joinDeadline: { type: Date },
+    participantCount: { type: Number, default: 0, min: 0 },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true },

@@ -6,7 +6,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // HEAD
   // =========================================================
 
-  [ROLES.HEAD]: Object.values(PERMISSIONS),
+  // Everything except joining contests: the Head runs them, employees compete.
+  [ROLES.HEAD]: Object.values(PERMISSIONS).filter(
+    (permission) => permission !== PERMISSIONS.CONTEST_JOIN,
+  ),
 
   // =========================================================
   // ADMIN
@@ -158,6 +161,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Contests
     PERMISSIONS.CONTEST_VIEW_ALL,
+    PERMISSIONS.CONTEST_PARTICIPANT_VIEW,
+    PERMISSIONS.CONTEST_LEADERBOARD_VIEW,
 
     // Reports
     PERMISSIONS.REPORT_VIEW,
@@ -274,6 +279,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.REVENUE_UPDATE,
     PERMISSIONS.REVENUE_MANAGE,
 
+    // Contests (watch their branch's contests, don't compete)
+    PERMISSIONS.CONTEST_PARTICIPANT_VIEW,
+    PERMISSIONS.CONTEST_LEADERBOARD_VIEW,
+
     // Reports
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.DAILY_REPORT_VIEW,
@@ -366,6 +375,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.REVENUE_CREATE,
     PERMISSIONS.REVENUE_UPDATE,
     PERMISSIONS.REVENUE_VIEW,
+
+    // Contests: join with "I'm in" and follow the standings
+    PERMISSIONS.CONTEST_JOIN,
+    PERMISSIONS.CONTEST_PARTICIPANT_VIEW,
+    PERMISSIONS.CONTEST_LEADERBOARD_VIEW,
 
     // Own reports
     PERMISSIONS.REPORT_VIEW,

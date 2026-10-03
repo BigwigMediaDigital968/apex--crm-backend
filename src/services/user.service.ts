@@ -9,6 +9,8 @@ import { ROLE_HIERARCHY, canManageRole } from "../permissions/roleHierarchy.js";
 import type { UpdateUserInput, UserListQuery } from "../types/user.js";
 import { notify } from "../services/notification.service.js";
 import { NOTIFICATION_TYPES } from "../models/Notification.js";
+import { runTransaction } from "../utils/transaction.js";
+import { syncProfileWithUserBranches } from "./employeeBranchSync.service.js";
 
 interface CreateUserInput {
   name: string;
@@ -334,8 +336,13 @@ export const updateUserBranches = async (
     }
   }
 
-  targetUser.branches = validBranchIds;
-  await targetUser.save();
+  // User and EmployeeProfile branches change together — see
+  // employeeBranchSync.service for the invariant.
+  await runTransaction(async (session) => {
+    targetUser.branches = validBranchIds;
+    await targetUser.save({ session });
+    await syncProfileWithUserBranches(targetUser, session);
+  });
 
   return targetUser;
 };
@@ -621,7 +628,12 @@ export const updateUser = async (
     targetUser.role = nextRole;
   }
 
-  await targetUser.save();
+  const roleChanged = targetUser.isModified("role");
+
+  await runTransaction(async (session) => {
+    await targetUser.save({ session });
+    if (roleChanged) await syncProfileWithUserBranches(targetUser, session);
+  });
 
   return {
     id: targetUser._id,
